@@ -75,6 +75,9 @@ Thumbs.db
 # Generated conflict backup files
 *.orig.*
 
+# Local deployment notes
+VERCEL_DEPLOYMENT_GUIDE.md
+
 # Neutralized nested scaffold Git metadata
 web/.git_removed_web/
 mobile/.git_removed_mobile/
