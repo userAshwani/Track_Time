@@ -52,6 +52,26 @@ export async function fetchTasksByHorizon(horizon, options = {}) {
   return payload?.data ?? [];
 }
 
+export async function requestLoginOtp(email, options = {}) {
+  const payload = await request("/api/auth/request-otp", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+    signal: options.signal,
+  });
+
+  return payload;
+}
+
+export async function verifyLoginOtp(email, otp, options = {}) {
+  const payload = await request("/api/auth/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ email, otp }),
+    signal: options.signal,
+  });
+
+  return payload?.user;
+}
+
 export async function createTask(taskData, options = {}) {
   const payload = await request("/api/tasks", {
     method: "POST",

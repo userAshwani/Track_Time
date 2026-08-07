@@ -15,6 +15,8 @@ The repository contains a Next.js web application that also acts as the backend 
 - API layer: Next.js Route Handlers under `web/src/app/api`
 - Database: MongoDB with Mongoose
 - Cache: Upstash Redis
+- Authentication: Email OTP with httpOnly session cookies
+- Email delivery: SMTP through Nodemailer
 - Mobile: React Native with Expo
 - Styling: Tailwind CSS for the web dashboard
 - Repository style: npm workspaces monorepo
@@ -28,7 +30,10 @@ Track_Time/
 │  │  ├─ dbConnect.js        MongoDB serverless connection utility
 │  │  └─ redis.js            Upstash Redis utility
 │  ├─ models/
-│  │  └─ Task.js             Mongoose Task schema
+│  │  ├─ Task.js             Mongoose Task schema
+│  │  ├─ User.js             Auth user and role schema
+│  │  ├─ OtpToken.js         Email OTP schema
+│  │  └─ Session.js          Login session schema
 │  ├─ src/
 │  │  ├─ app/
 │  │  │  ├─ api/tasks/       GET and POST task API routes
@@ -86,6 +91,14 @@ Use:
 MONGODB_URI=your_mongodb_connection_string
 UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
 UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your_gmail_address
+SMTP_APP_PASSWORD=your_gmail_app_password
+EMAIL_FROM="Track Time <your_gmail_address>"
+AUTH_SECRET=use_a_long_random_secret_at_least_32_characters
+SUPERADMIN_EMAIL=your_superadmin_email
 ```
 
 ### Mobile Environment
@@ -126,6 +139,12 @@ Open:
 
 ```text
 http://localhost:3000/dashboard
+```
+
+If you are not logged in, the app redirects to:
+
+```text
+http://localhost:3000/login
 ```
 
 The API runs on the same local server:
@@ -174,6 +193,39 @@ npm run typecheck:mobile
 ```
 
 ## API Overview
+
+### Authentication
+
+Request OTP:
+
+```http
+POST /api/auth/request-otp
+```
+
+Body:
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+Verify OTP:
+
+```http
+POST /api/auth/verify-otp
+```
+
+Body:
+
+```json
+{
+  "email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+If the email is new, the user is created automatically. If the email already exists, the user is logged in. The configured `SUPERADMIN_EMAIL` receives the `superadmin` role.
 
 ### Fetch Tasks
 
@@ -245,6 +297,14 @@ Output Directory: .next
 MONGODB_URI=your_mongodb_connection_string
 UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
 UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your_gmail_address
+SMTP_APP_PASSWORD=your_gmail_app_password
+EMAIL_FROM="Track Time <your_gmail_address>"
+AUTH_SECRET=use_a_long_random_secret_at_least_32_characters
+SUPERADMIN_EMAIL=your_superadmin_email
 ```
 
 7. Deploy.
@@ -252,6 +312,18 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 
 ```text
 https://your-vercel-domain.vercel.app/dashboard
+```
+
+Login page:
+
+```text
+https://your-vercel-domain.vercel.app/login
+```
+
+Superadmin analytics:
+
+```text
+https://your-vercel-domain.vercel.app/superadmin
 ```
 
 The backend API will be available on the same Vercel domain:

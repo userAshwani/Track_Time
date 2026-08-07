@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import dbConnect from "../../../../lib/dbConnect.js";
+import { getCurrentUser } from "../../../../lib/auth.js";
 import redis from "../../../../lib/redis.js";
 import Task, { TASK_STATUSES, TIME_HORIZONS } from "../../../../models/Task.js";
 
@@ -19,10 +20,10 @@ function jsonResponse(payload, status = 200, headers = {}) {
   });
 }
 
-function getTasksCacheKey(timeHorizon) {
+function getTasksCacheKey(userId, timeHorizon) {
   return timeHorizon
-    ? `${CACHE_NAMESPACE}:horizon:${timeHorizon}`
-    : `${CACHE_NAMESPACE}:all`;
+    ? `${CACHE_NAMESPACE}:user:${userId}:horizon:${timeHorizon}`
+    : `${CACHE_NAMESPACE}:user:${userId}:all`;
 }
 
 function normalizeInteger(value, fallback = undefined) {
@@ -99,11 +100,11 @@ async function setCachedTasks(cacheKey, tasks) {
   }
 }
 
-async function invalidateTaskCaches(timeHorizon) {
-  const keys = [getTasksCacheKey()];
+async function invalidateTaskCaches(userId, timeHorizon) {
+  const keys = [getTasksCacheKey(userId)];
 
   if (timeHorizon) {
-    keys.push(getTasksCacheKey(timeHorizon));
+    keys.push(getTasksCacheKey(userId, timeHorizon));
   }
 
   try {
@@ -115,6 +116,15 @@ async function invalidateTaskCaches(timeHorizon) {
 
 export async function GET(request) {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return jsonResponse(
+        { success: false, error: "Authentication required." },
+        401
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const timeHorizon = searchParams.get("timeHorizon");
 
@@ -128,7 +138,7 @@ export async function GET(request) {
       );
     }
 
-    const cacheKey = getTasksCacheKey(timeHorizon);
+    const cacheKey = getTasksCacheKey(currentUser._id, timeHorizon);
     const cachedTasks = await getCachedTasks(cacheKey);
 
     if (cachedTasks) {
@@ -146,7 +156,10 @@ export async function GET(request) {
 
     await dbConnect();
 
-    const query = timeHorizon ? { timeHorizon } : {};
+    const query = {
+      userId: currentUser._id,
+      ...(timeHorizon ? { timeHorizon } : {}),
+    };
     const tasks = await Task.find(query)
       .sort({ updatedAt: -1 })
       .lean();
@@ -178,6 +191,15 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return jsonResponse(
+        { success: false, error: "Authentication required." },
+        401
+      );
+    }
+
     const body = await request.json();
     const payload = normalizeTaskPayload(body);
     const validationErrors = validateTaskPayload(payload);
@@ -194,11 +216,14 @@ export async function POST(request) {
 
     await dbConnect();
 
-    const task = await Task.create(payload);
+    const task = await Task.create({
+      ...payload,
+      userId: currentUser._id,
+    });
     const serializedTask = task.toObject();
     delete serializedTask.pushToken;
 
-    await invalidateTaskCaches(serializedTask.timeHorizon);
+    await invalidateTaskCaches(currentUser._id, serializedTask.timeHorizon);
 
     return jsonResponse(
       {

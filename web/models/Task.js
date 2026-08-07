@@ -7,6 +7,12 @@ export const TIME_HORIZONS = ["1_Day", "1_Week", "1_Month", "1_Year"];
 
 const TaskSchema = new Schema(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     title: {
       type: String,
       required: [true, "Task title is required."],
@@ -75,6 +81,7 @@ const TaskSchema = new Schema(
 );
 
 TaskSchema.index({ timeHorizon: 1, status: 1, updatedAt: -1 });
+TaskSchema.index({ userId: 1, timeHorizon: 1, status: 1, updatedAt: -1 });
 TaskSchema.index({ isAlarmSet: 1, alarmTime: 1 });
 TaskSchema.index({ createdAt: -1 });
 
