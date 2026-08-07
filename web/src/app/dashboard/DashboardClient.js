@@ -1,136 +1,116 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import TaskCard from "../../components/TaskCard";
 
 const HORIZONS = [
-  {
-    key: "1_Day",
-    title: "Today",
-    subtitle: "Immediate execution window",
-  },
-  {
-    key: "1_Week",
-    title: "This Week",
-    subtitle: "Short-cycle operating plan",
-  },
-  {
-    key: "1_Month",
-    title: "This Month",
-    subtitle: "Monthly delivery commitments",
-  },
-  {
-    key: "1_Year",
-    title: "This Year",
-    subtitle: "Annual strategic initiatives",
-  },
+  { key: "1_Day", title: "Today", subtitle: "Immediate execution" },
+  { key: "1_Week", title: "This Week", subtitle: "Weekly commitments" },
+  { key: "1_Month", title: "This Month", subtitle: "Monthly delivery" },
+  { key: "1_Year", title: "This Year", subtitle: "Annual priorities" },
 ];
 
-function calculateHorizonSummary(tasks) {
+function getDisplayName(email) {
+  return email?.split("@")[0]?.replace(/[._-]+/g, " ") || "User";
+}
+
+function formatHours(minutes) {
+  return `${Math.round(((Number(minutes) || 0) / 60) * 10) / 10}h`;
+}
+
+function calculateSummary(tasks) {
   return tasks.reduce(
     (summary, task) => {
-      const allocated = Math.max(0, Number(task.timeAllocated) || 0);
-      const spent = Math.max(0, Number(task.timeSpent) || 0);
+      const allocated = Number(task.timeAllocated) || 0;
+      const spent = Number(task.timeSpent) || 0;
 
       return {
         allocated: summary.allocated + allocated,
         spent: summary.spent + spent,
-        completed:
-          summary.completed + (task.status === "completed" ? 1 : 0),
-        alarms:
-          summary.alarms + (task.isAlarmSet ? 1 : 0),
+        completed: summary.completed + (task.status === "completed" ? 1 : 0),
+        alarms: summary.alarms + (task.isAlarmSet ? 1 : 0),
       };
     },
     { allocated: 0, spent: 0, completed: 0, alarms: 0 }
   );
 }
 
-function formatHours(minutes) {
-  const hours = Math.round((minutes / 60) * 10) / 10;
-  return `${hours}h`;
+function HealthMetric({ label, value, colorClass, widthClass }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        <p className="text-sm font-bold text-slate-500">{value}</p>
+      </div>
+      <div className="h-2 rounded-full bg-slate-100">
+        <div className={`h-2 rounded-full ${colorClass} ${widthClass}`} />
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, helper }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm font-semibold text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
+      <p className="mt-2 text-sm text-slate-500">{helper}</p>
+    </div>
+  );
 }
 
 function HorizonColumn({ horizon, tasks, isLoading, error }) {
-  const summary = useMemo(() => calculateHorizonSummary(tasks), [tasks]);
+  const summary = useMemo(() => calculateSummary(tasks), [tasks]);
   const progress =
     summary.allocated > 0
       ? Math.min(100, Math.round((summary.spent / summary.allocated) * 100))
       : 0;
 
   return (
-    <section className="flex min-h-[560px] flex-col border border-slate-200 bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-5 py-4">
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <header className="border-b border-slate-200 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black leading-7 text-slate-950">
-              {horizon.title}
-            </h2>
-            <p className="mt-1 text-sm font-semibold leading-5 text-slate-500">
+            <h3 className="text-lg font-bold text-slate-900">{horizon.title}</h3>
+            <p className="mt-1 text-sm font-medium text-slate-500">
               {horizon.subtitle}
             </p>
           </div>
-          <span className="border border-blue-900 bg-blue-950 px-3 py-1 text-sm font-black text-white">
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">
             {tasks.length}
           </span>
         </div>
-
         <div className="mt-5">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-bold text-slate-700">Horizon Progress</span>
-            <span className="font-black text-blue-950">{progress}%</span>
+          <div className="mb-2 flex justify-between text-sm">
+            <span className="font-semibold text-slate-600">Progress</span>
+            <span className="font-bold text-slate-900">{progress}%</span>
           </div>
-          <div className="h-3 border border-slate-300 bg-slate-100">
-            <div className="h-full bg-blue-950" style={{ width: `${progress}%` }} />
+          <div className="h-2 rounded-full bg-slate-100">
+            <div
+              className="h-2 rounded-full bg-emerald-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
-
-        <dl className="mt-4 grid grid-cols-3 border border-slate-200 bg-white text-center">
-          <div className="border-r border-slate-200 px-2 py-2">
-            <dt className="text-xs font-bold uppercase tracking-normal text-slate-500">
-              Spent
-            </dt>
-            <dd className="mt-1 text-sm font-black text-slate-950">
-              {formatHours(summary.spent)}
-            </dd>
-          </div>
-          <div className="border-r border-slate-200 px-2 py-2">
-            <dt className="text-xs font-bold uppercase tracking-normal text-slate-500">
-              Done
-            </dt>
-            <dd className="mt-1 text-sm font-black text-slate-950">
-              {summary.completed}
-            </dd>
-          </div>
-          <div className="px-2 py-2">
-            <dt className="text-xs font-bold uppercase tracking-normal text-slate-500">
-              Alarms
-            </dt>
-            <dd className="mt-1 text-sm font-black text-slate-950">
-              {summary.alarms}
-            </dd>
-          </div>
-        </dl>
       </header>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <div className="space-y-4 p-4">
         {isLoading ? (
-          <div className="border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-600">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
             Loading tasks...
           </div>
         ) : null}
 
         {error ? (
-          <div className="border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
             {error}
           </div>
         ) : null}
 
         {!isLoading && !error && tasks.length === 0 ? (
-          <div className="border border-slate-200 bg-white p-4">
-            <p className="text-sm font-bold text-slate-950">No tasks assigned</p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-bold text-slate-900">No tasks assigned</p>
             <p className="mt-1 text-sm leading-6 text-slate-500">
               This horizon is clear and ready for planning.
             </p>
@@ -146,7 +126,6 @@ function HorizonColumn({ horizon, tasks, isLoading, error }) {
 }
 
 export default function DashboardClient({ user }) {
-  const router = useRouter();
   const [tasksByHorizon, setTasksByHorizon] = useState(
     Object.fromEntries(HORIZONS.map((horizon) => [horizon.key, []]))
   );
@@ -159,9 +138,6 @@ export default function DashboardClient({ user }) {
     description: "",
     timeHorizon: "1_Day",
     timeAllocated: 60,
-    timeSpent: 0,
-    status: "pending",
-    isAlarmSet: false,
     alarmTime: "",
   });
 
@@ -176,7 +152,6 @@ export default function DashboardClient({ user }) {
             cache: "no-store",
             signal,
           });
-
           const payload = await response.json();
 
           if (!response.ok || !payload.success) {
@@ -223,14 +198,6 @@ export default function DashboardClient({ user }) {
     };
   }, []);
 
-  async function handleLogout() {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-    });
-
-    router.replace("/login");
-  }
-
   async function handleCreateTask(event) {
     event.preventDefault();
     setIsCreating(true);
@@ -239,17 +206,16 @@ export default function DashboardClient({ user }) {
     try {
       const response = await fetch("/api/tasks", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          status: "pending",
           timeAllocated: Number(form.timeAllocated),
-          timeSpent: Number(form.timeSpent),
-          alarmTime: form.isAlarmSet && form.alarmTime ? form.alarmTime : null,
+          timeSpent: 0,
+          isAlarmSet: Boolean(form.alarmTime),
+          alarmTime: form.alarmTime || null,
         }),
       });
-
       const payload = await response.json();
 
       if (!response.ok || !payload.success) {
@@ -261,9 +227,6 @@ export default function DashboardClient({ user }) {
         description: "",
         timeHorizon: "1_Day",
         timeAllocated: 60,
-        timeSpent: 0,
-        status: "pending",
-        isAlarmSet: false,
         alarmTime: "",
       });
       await loadTasks();
@@ -274,136 +237,130 @@ export default function DashboardClient({ user }) {
     }
   }
 
-  const portfolioSummary = useMemo(() => {
-    const allTasks = Object.values(tasksByHorizon).flat();
-    const summary = calculateHorizonSummary(allTasks);
-    const progress =
-      summary.allocated > 0
-        ? Math.min(100, Math.round((summary.spent / summary.allocated) * 100))
-        : 0;
-
-    return {
-      ...summary,
-      progress,
-      totalTasks: allTasks.length,
-    };
-  }, [tasksByHorizon]);
+  const allTasks = Object.values(tasksByHorizon).flat();
+  const portfolioSummary = calculateSummary(allTasks);
+  const totalProgress =
+    portfolioSummary.allocated > 0
+      ? Math.min(100, Math.round((portfolioSummary.spent / portfolioSummary.allocated) * 100))
+      : 0;
+  const healthScore = Math.max(52, Math.min(96, 70 + totalProgress / 3));
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="border-b border-blue-900 bg-blue-950">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-6 px-5 py-8 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto max-w-[1600px] space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-white p-6 shadow-sm md:p-8">
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr] lg:items-center">
           <div>
-            <p className="text-sm font-black uppercase tracking-normal text-blue-200">
-              Track Time Command Center
+            <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+              Daily operating rhythm
             </p>
-            <h1 className="mt-3 text-4xl font-black leading-tight text-white sm:text-5xl">
-              Enterprise Time Horizon Dashboard
-            </h1>
-            <p className="mt-3 max-w-3xl text-base font-semibold leading-7 text-blue-100">
-              Govern daily execution, weekly commitments, monthly delivery, and
-              annual priorities from one operational view.
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+              Late evening, {getDisplayName(user.email)} — your story starts today.
+            </h2>
+            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-500">
+              Convert execution intent into visible task horizons, measured time,
+              and scheduled reminders.
             </p>
-            <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold">
-              <span className="border border-blue-700 bg-blue-900 px-3 py-2 text-blue-100">
-                {user.email}
-              </span>
-              {user.role === "superadmin" ? (
-                <Link
-                  href="/superadmin"
-                  className="border border-amber-300 bg-amber-400 px-3 py-2 text-blue-950"
-                >
-                  Superadmin Analytics
-                </Link>
-              ) : null}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="border border-blue-700 bg-blue-950 px-3 py-2 text-blue-100"
-              >
-                Logout
-              </button>
-            </div>
+            <a
+              href="#create-task"
+              className="mt-6 inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+            >
+              Create task
+            </a>
           </div>
 
-          <div className="grid w-full grid-cols-2 border border-blue-800 bg-blue-900 text-white sm:w-auto sm:min-w-[520px] sm:grid-cols-4">
-            <div className="border-b border-r border-blue-800 px-4 py-3 sm:border-b-0">
-              <p className="text-xs font-bold uppercase tracking-normal text-blue-200">
-                Tasks
-              </p>
-              <p className="mt-1 text-2xl font-black">{portfolioSummary.totalTasks}</p>
+          <div className="grid grid-cols-2 gap-4">
+            <StatCard label="Tasks" value={allTasks.length} helper="Across horizons" />
+            <StatCard label="Progress" value={`${totalProgress}%`} helper="Time utilized" />
+            <StatCard label="Spent" value={formatHours(portfolioSummary.spent)} helper="Tracked time" />
+            <StatCard label="Alarms" value={portfolioSummary.alarms} helper="Scheduled reminders" />
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center">
+            <div className="relative flex h-40 w-40 shrink-0 items-center justify-center rounded-full bg-slate-50">
+              <svg viewBox="0 0 120 120" className="h-40 w-40 rotate-[-90deg]">
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="48"
+                  fill="none"
+                  stroke="#e2e8f0"
+                  strokeWidth="12"
+                />
+                <circle
+                  cx="60"
+                  cy="60"
+                  r="48"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  strokeDasharray={`${healthScore * 3.01} 301`}
+                />
+              </svg>
+              <div className="absolute text-center">
+                <p className="text-4xl font-bold text-slate-900">
+                  {Math.round(healthScore)}
+                </p>
+                <p className="text-xs font-bold uppercase text-slate-500">out of 100</p>
+              </div>
             </div>
-            <div className="border-b border-blue-800 px-4 py-3 sm:border-b-0 sm:border-r">
-              <p className="text-xs font-bold uppercase tracking-normal text-blue-200">
-                Progress
+            <div className="flex-1">
+              <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+                Account Health
               </p>
-              <p className="mt-1 text-2xl font-black">{portfolioSummary.progress}%</p>
-            </div>
-            <div className="border-r border-blue-800 px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-normal text-blue-200">
-                Spent
+              <h3 className="mt-2 text-2xl font-bold text-slate-900">
+                Good standing, room to grow
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Your workspace health improves as you add tasks, track time, and
+                keep alarms current across each horizon.
               </p>
-              <p className="mt-1 text-2xl font-black">
-                {formatHours(portfolioSummary.spent)}
-              </p>
-            </div>
-            <div className="px-4 py-3">
-              <p className="text-xs font-bold uppercase tracking-normal text-blue-200">
-                Alarms
-              </p>
-              <p className="mt-1 text-2xl font-black">{portfolioSummary.alarms}</p>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <HealthMetric label="Lead Engagement" value="Medium" colorClass="bg-orange-400" widthClass="w-[62%]" />
+                <HealthMetric label="Reliability" value="High" colorClass="bg-emerald-500" widthClass="w-[86%]" />
+                <HealthMetric label="Activity Pattern" value="Low" colorClass="bg-red-400" widthClass="w-[24%]" />
+                <HealthMetric label="Response Quality" value="High" colorClass="bg-emerald-500" widthClass="w-[90%]" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-[1800px] px-5 py-6 sm:px-8">
         <form
+          id="create-task"
           onSubmit={handleCreateTask}
-          className="mb-6 border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <div className="mb-4 flex flex-col gap-2 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-black uppercase text-blue-900">
-                Task Intake
-              </p>
-              <h2 className="mt-1 text-2xl font-black text-slate-950">
-                Create a tracked task
-              </h2>
-            </div>
-            {createError ? (
-              <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-800">
-                {createError}
-              </p>
-            ) : null}
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+              Task Intake
+            </p>
+            <h3 className="mt-2 text-2xl font-bold text-slate-900">
+              Add a tracked task
+            </h3>
           </div>
-
-          <div className="grid gap-4 lg:grid-cols-12">
-            <label className="lg:col-span-3">
-              <span className="text-xs font-black uppercase text-slate-600">Title</span>
-              <input
-                value={form.title}
-                onChange={(event) => setForm({ ...form, title: event.target.value })}
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-900"
-                placeholder="Daily operations report"
-                required
-              />
-            </label>
-            <label className="lg:col-span-3">
-              <span className="text-xs font-black uppercase text-slate-600">Description</span>
-              <input
-                value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-900"
-                placeholder="Optional context"
-              />
-            </label>
-            <label className="lg:col-span-2">
-              <span className="text-xs font-black uppercase text-slate-600">Horizon</span>
+          <div className="mt-5 grid gap-4">
+            <input
+              value={form.title}
+              onChange={(event) => setForm({ ...form, title: event.target.value })}
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="Task title"
+              required
+            />
+            <input
+              value={form.description}
+              onChange={(event) => setForm({ ...form, description: event.target.value })}
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="Short description"
+            />
+            <div className="grid gap-4 md:grid-cols-3">
               <select
                 value={form.timeHorizon}
                 onChange={(event) => setForm({ ...form, timeHorizon: event.target.value })}
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-900"
+                className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               >
                 {HORIZONS.map((horizon) => (
                   <option key={horizon.key} value={horizon.key}>
@@ -411,54 +368,50 @@ export default function DashboardClient({ user }) {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="lg:col-span-1">
-              <span className="text-xs font-black uppercase text-slate-600">Minutes</span>
               <input
                 type="number"
                 min="1"
                 value={form.timeAllocated}
                 onChange={(event) => setForm({ ...form, timeAllocated: event.target.value })}
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-900"
+                className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                placeholder="Minutes"
               />
-            </label>
-            <label className="lg:col-span-2">
-              <span className="text-xs font-black uppercase text-slate-600">Alarm</span>
               <input
                 type="datetime-local"
                 value={form.alarmTime}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    alarmTime: event.target.value,
-                    isAlarmSet: Boolean(event.target.value),
-                  })
-                }
-                className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-900"
+                onChange={(event) => setForm({ ...form, alarmTime: event.target.value })}
+                className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               />
-            </label>
-            <button
-              type="submit"
-              disabled={isCreating}
-              className="bg-blue-950 px-4 py-2 text-sm font-black text-white disabled:bg-slate-400 lg:col-span-1 lg:self-end"
-            >
-              {isCreating ? "Saving" : "Add"}
-            </button>
+            </div>
           </div>
-        </form>
 
-        <div className="grid gap-5 xl:grid-cols-4">
-          {HORIZONS.map((horizon) => (
-            <HorizonColumn
-              key={horizon.key}
-              horizon={horizon}
-              tasks={tasksByHorizon[horizon.key] ?? []}
-              isLoading={isLoading}
-              error={errorsByHorizon[horizon.key]}
-            />
-          ))}
-        </div>
-      </div>
-    </main>
+          {createError ? (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {createError}
+            </p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={isCreating}
+            className="mt-5 w-full rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:bg-slate-300"
+          >
+            {isCreating ? "Saving task" : "Create task"}
+          </button>
+        </form>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-4">
+        {HORIZONS.map((horizon) => (
+          <HorizonColumn
+            key={horizon.key}
+            horizon={horizon}
+            tasks={tasksByHorizon[horizon.key] ?? []}
+            isLoading={isLoading}
+            error={errorsByHorizon[horizon.key]}
+          />
+        ))}
+      </section>
+    </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import dbConnect from "../../../../lib/dbConnect.js";
 import { getCurrentUser } from "../../../../lib/auth.js";
-import redis from "../../../../lib/redis.js";
+import { deleteCache, getCache, setCache } from "../../../../lib/cache.js";
 import Task, { TASK_STATUSES, TIME_HORIZONS } from "../../../../models/Task.js";
 
 export const runtime = "nodejs";
@@ -85,18 +85,18 @@ function validateTaskPayload(payload) {
 
 async function getCachedTasks(cacheKey) {
   try {
-    return await redis.get(cacheKey);
+    return await getCache(cacheKey);
   } catch (error) {
-    console.error("Redis GET failed. Falling back to MongoDB.", error);
+    console.error("Cache GET failed. Falling back to MongoDB.", error);
     return null;
   }
 }
 
 async function setCachedTasks(cacheKey, tasks) {
   try {
-    await redis.set(cacheKey, tasks, { ex: CACHE_TTL_SECONDS });
+    await setCache(cacheKey, tasks, CACHE_TTL_SECONDS);
   } catch (error) {
-    console.error("Redis SET failed. Continuing without cache write.", error);
+    console.error("Cache SET failed. Continuing without cache write.", error);
   }
 }
 
@@ -108,9 +108,9 @@ async function invalidateTaskCaches(userId, timeHorizon) {
   }
 
   try {
-    await redis.del(...keys);
+    await deleteCache(...keys);
   } catch (error) {
-    console.error("Redis DEL failed. Cache will expire by TTL.", error);
+    console.error("Cache DEL failed. Cache will expire by TTL.", error);
   }
 }
 

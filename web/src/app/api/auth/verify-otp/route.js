@@ -80,26 +80,42 @@ export async function POST(request) {
     const role = getRoleForEmail(email);
     const userAgent = request.headers.get("user-agent") || "";
     const lastIp = getClientIp(request);
+    const loginAt = new Date();
 
-    const user = await User.findOneAndUpdate(
-      { email },
-      {
-        $setOnInsert: { email, role },
-        $set: {
-          role,
-          status: "active",
-          lastLoginAt: new Date(),
-          lastIp,
-          lastUserAgent: userAgent,
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        email,
+        role,
+        status: "active",
+        loginCount: 1,
+        lastLoginAt: loginAt,
+        lastIp,
+        lastUserAgent: userAgent,
+      });
+    } else {
+      user = await User.findOneAndUpdate(
+        { email },
+        {
+          $set: {
+            role,
+            status: "active",
+            lastLoginAt: loginAt,
+            lastIp,
+            lastUserAgent: userAgent,
+          },
+          $inc: { loginCount: 1 },
         },
-        $inc: { loginCount: 1 },
-      },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      }
-    );
+        {
+          new: true,
+        }
+      );
+    }
+
+    if (!user) {
+      throw new Error("User login could not be completed.");
+    }
 
     const token = await createSession(user, request);
     const response = NextResponse.json({

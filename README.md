@@ -14,7 +14,7 @@ The repository contains a Next.js web application that also acts as the backend 
 - Web and backend: Next.js App Router
 - API layer: Next.js Route Handlers under `web/src/app/api`
 - Database: MongoDB with Mongoose
-- Cache: Upstash Redis
+- Cache: free in-memory process cache for short-lived task reads
 - Authentication: Email OTP with httpOnly session cookies
 - Email delivery: SMTP through Nodemailer
 - Mobile: React Native with Expo
@@ -28,7 +28,7 @@ Track_Time/
 ├─ web/
 │  ├─ lib/
 │  │  ├─ dbConnect.js        MongoDB serverless connection utility
-│  │  └─ redis.js            Upstash Redis utility
+│  │  └─ cache.js            Free in-memory cache utility
 │  ├─ models/
 │  │  ├─ Task.js             Mongoose Task schema
 │  │  ├─ User.js             Auth user and role schema
@@ -89,8 +89,6 @@ Use:
 
 ```env
 MONGODB_URI=your_mongodb_connection_string
-UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
-UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -295,8 +293,6 @@ Output Directory: .next
 
 ```env
 MONGODB_URI=your_mongodb_connection_string
-UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url
-UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
