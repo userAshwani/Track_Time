@@ -86,9 +86,11 @@ export async function POST(request) {
 
     if (!user) {
       user = await User.create({
+        name: email.split("@")[0].replace(/[._-]+/g, " "),
         email,
         role,
         status: "active",
+        authMethods: ["otp"],
         loginCount: 1,
         lastLoginAt: loginAt,
         lastIp,
@@ -105,6 +107,7 @@ export async function POST(request) {
             lastIp,
             lastUserAgent: userAgent,
           },
+          $addToSet: { authMethods: "otp" },
           $inc: { loginCount: 1 },
         },
         {
@@ -122,6 +125,7 @@ export async function POST(request) {
       success: true,
       user: {
         id: String(user._id),
+        name: user.name || "",
         email: user.email,
         role: user.role,
       },

@@ -34,6 +34,28 @@ export function hashValue(value) {
     .digest("hex");
 }
 
+export function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const passwordHash = crypto
+    .scryptSync(String(password), salt, 64)
+    .toString("hex");
+
+  return `${salt}:${passwordHash}`;
+}
+
+export function verifyPassword(password, storedPasswordHash) {
+  if (!password || !storedPasswordHash || !storedPasswordHash.includes(":")) {
+    return false;
+  }
+
+  const [salt, hash] = storedPasswordHash.split(":");
+  const candidate = crypto
+    .scryptSync(String(password), salt, 64)
+    .toString("hex");
+
+  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(candidate, "hex"));
+}
+
 export function createOtp() {
   return crypto.randomInt(100000, 1000000).toString();
 }
@@ -123,6 +145,7 @@ export async function getCurrentUser() {
 
   return {
     _id: String(user._id),
+    name: user.name || "",
     email: user.email,
     role: user.role,
     createdAt: user.createdAt,

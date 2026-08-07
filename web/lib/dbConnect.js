@@ -25,6 +25,7 @@ export default async function dbConnect() {
 
     cached.promise = mongoose
       .connect(MONGODB_URI, {
+        dbName: process.env.MONGODB_DB || "track_time",
         bufferCommands: false,
         maxPoolSize: 10,
         minPoolSize: 0,

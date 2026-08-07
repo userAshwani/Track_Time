@@ -7,6 +7,12 @@ export const USER_STATUSES = ["active", "disabled"];
 
 const UserSchema = new Schema(
   {
+    name: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Name cannot exceed 120 characters."],
+      default: "",
+    },
     email: {
       type: String,
       required: true,
@@ -26,6 +32,20 @@ const UserSchema = new Schema(
       enum: USER_STATUSES,
       default: "active",
       index: true,
+    },
+    passwordHash: {
+      type: String,
+      default: "",
+      select: false,
+    },
+    passwordUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    authMethods: {
+      type: [String],
+      enum: ["otp", "password", "google"],
+      default: ["otp"],
     },
     loginCount: {
       type: Number,
