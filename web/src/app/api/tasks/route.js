@@ -92,6 +92,44 @@ async function getCachedTasks(cacheKey) {
   }
 }
 
+function normalizeTaskUpdatePayload(body) {
+  const payload = {};
+
+  if (typeof body.title === "string") {
+    payload.title = body.title.trim();
+  }
+
+  if (typeof body.description === "string") {
+    payload.description = body.description.trim();
+  }
+
+  if (body.status !== undefined) {
+    payload.status = body.status;
+  }
+
+  if (body.timeHorizon !== undefined) {
+    payload.timeHorizon = body.timeHorizon;
+  }
+
+  if (body.timeAllocated !== undefined) {
+    payload.timeAllocated = normalizeInteger(body.timeAllocated);
+  }
+
+  if (body.timeSpent !== undefined) {
+    payload.timeSpent = normalizeInteger(body.timeSpent);
+  }
+
+  if (body.isAlarmSet !== undefined) {
+    payload.isAlarmSet = Boolean(body.isAlarmSet);
+  }
+
+  if (body.alarmTime !== undefined) {
+    payload.alarmTime = body.alarmTime ? new Date(body.alarmTime) : null;
+  }
+
+  return payload;
+}
+
 async function setCachedTasks(cacheKey, tasks) {
   try {
     await setCache(cacheKey, tasks, CACHE_TTL_SECONDS);
@@ -260,6 +298,155 @@ export async function POST(request) {
         success: false,
         error: "Unable to create task.",
       },
+      500
+    );
+  }
+}
+
+export async function PATCH(request) {
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return jsonResponse(
+        { success: false, error: "Authentication required." },
+        401
+      );
+    }
+
+    const body = await request.json();
+    const taskId = String(body.id || body._id || "").trim();
+
+    if (!taskId) {
+      return jsonResponse(
+        { success: false, error: "Task id is required." },
+        400
+      );
+    }
+
+    const payload = normalizeTaskUpdatePayload(body);
+    const validationErrors = [];
+
+    if (payload.title !== undefined && !payload.title) {
+      validationErrors.push("title cannot be empty.");
+    }
+
+    if (payload.status !== undefined && !TASK_STATUSES.includes(payload.status)) {
+      validationErrors.push(`status must be one of: ${TASK_STATUSES.join(", ")}.`);
+    }
+
+    if (payload.timeHorizon !== undefined && !TIME_HORIZONS.includes(payload.timeHorizon)) {
+      validationErrors.push(`timeHorizon must be one of: ${TIME_HORIZONS.join(", ")}.`);
+    }
+
+    if (
+      payload.timeAllocated !== undefined &&
+      (!Number.isInteger(payload.timeAllocated) || payload.timeAllocated < 1)
+    ) {
+      validationErrors.push("timeAllocated must be a positive integer in minutes.");
+    }
+
+    if (
+      payload.timeSpent !== undefined &&
+      (!Number.isInteger(payload.timeSpent) || payload.timeSpent < 0)
+    ) {
+      validationErrors.push("timeSpent must be a non-negative integer in minutes.");
+    }
+
+    if (payload.alarmTime && Number.isNaN(payload.alarmTime.getTime())) {
+      validationErrors.push("alarmTime must be a valid ISO date.");
+    }
+
+    if (validationErrors.length > 0) {
+      return jsonResponse({ success: false, errors: validationErrors }, 400);
+    }
+
+    await dbConnect();
+
+    const existingTask = await Task.findOne({
+      _id: taskId,
+      userId: currentUser._id,
+    }).lean();
+
+    if (!existingTask) {
+      return jsonResponse(
+        { success: false, error: "Task not found." },
+        404
+      );
+    }
+
+    const task = await Task.findOneAndUpdate(
+      { _id: taskId, userId: currentUser._id },
+      { $set: payload },
+      { new: true, runValidators: true }
+    ).lean();
+
+    await invalidateTaskCaches(currentUser._id, existingTask.timeHorizon);
+
+    if (task.timeHorizon !== existingTask.timeHorizon) {
+      await invalidateTaskCaches(currentUser._id, task.timeHorizon);
+    }
+
+    return jsonResponse({
+      success: true,
+      data: task,
+    });
+  } catch (error) {
+    console.error("PATCH /api/tasks failed.", error);
+
+    return jsonResponse(
+      { success: false, error: "Unable to update task." },
+      500
+    );
+  }
+}
+
+export async function DELETE(request) {
+  try {
+    const currentUser = await getCurrentUser();
+
+    if (!currentUser) {
+      return jsonResponse(
+        { success: false, error: "Authentication required." },
+        401
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const taskId = searchParams.get("id");
+
+    if (!taskId) {
+      return jsonResponse(
+        { success: false, error: "Task id is required." },
+        400
+      );
+    }
+
+    await dbConnect();
+
+    const task = await Task.findOneAndDelete({
+      _id: taskId,
+      userId: currentUser._id,
+    }).lean();
+
+    if (!task) {
+      return jsonResponse(
+        { success: false, error: "Task not found." },
+        404
+      );
+    }
+
+    await invalidateTaskCaches(currentUser._id, task.timeHorizon);
+
+    return jsonResponse({
+      success: true,
+      data: task,
+    });
+  } catch (error) {
+    console.error("DELETE /api/tasks failed.", error);
+
+    return jsonResponse(
+      { success: false, error: "Unable to delete task." },
       500
     );
   }

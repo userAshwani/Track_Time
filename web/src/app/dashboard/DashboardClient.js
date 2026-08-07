@@ -1,22 +1,30 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  CalendarClock,
+  Activity,
+  AlarmClock,
+  BarChart3,
+  CheckCircle2,
+  Clock3,
   Info,
+  LayoutDashboard,
+  Plus,
   Save,
   ShieldCheck,
+  Target,
   UserRound,
 } from "lucide-react";
 
 import TaskCard from "../../components/TaskCard";
 
 const HORIZONS = [
-  { key: "1_Day", title: "Today", subtitle: "Immediate execution", view: "today" },
-  { key: "1_Week", title: "This Week", subtitle: "Weekly commitments", view: "week" },
-  { key: "1_Month", title: "This Month", subtitle: "Monthly delivery", view: "month" },
-  { key: "1_Year", title: "This Year", subtitle: "Annual priorities", view: "year" },
+  { key: "1_Day", title: "Today", shortTitle: "Day", subtitle: "Immediate focus", view: "today" },
+  { key: "1_Week", title: "This Week", shortTitle: "Week", subtitle: "Weekly commitments", view: "week" },
+  { key: "1_Month", title: "This Month", shortTitle: "Month", subtitle: "Monthly targets", view: "month" },
+  { key: "1_Year", title: "This Year", shortTitle: "Year", subtitle: "Annual goals", view: "year" },
 ];
 
 const VIEW_TO_HORIZON = {
@@ -34,6 +42,17 @@ function formatHours(minutes) {
   return `${Math.round(((Number(minutes) || 0) / 60) * 10) / 10}h`;
 }
 
+function formatDate(date) {
+  if (!date) {
+    return "Never";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(date));
+}
+
 function calculateSummary(tasks) {
   return tasks.reduce(
     (summary, task) => {
@@ -44,42 +63,27 @@ function calculateSummary(tasks) {
         allocated: summary.allocated + allocated,
         spent: summary.spent + spent,
         completed: summary.completed + (task.status === "completed" ? 1 : 0),
+        active: summary.active + (task.status !== "completed" ? 1 : 0),
         alarms: summary.alarms + (task.isAlarmSet ? 1 : 0),
       };
     },
-    { allocated: 0, spent: 0, completed: 0, alarms: 0 }
+    { allocated: 0, spent: 0, completed: 0, active: 0, alarms: 0 }
   );
 }
 
-function HealthMetric({ label, value, colorClass, widthClass }) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-700">{label}</p>
-        <p className="text-sm font-bold text-slate-500">{value}</p>
-      </div>
-      <div className="h-2 rounded-full bg-slate-100">
-        <div className={`h-2 rounded-full ${colorClass} ${widthClass}`} />
-      </div>
-    </div>
-  );
-}
+function percentage(part, total) {
+  if (!total) {
+    return 0;
+  }
 
-function StatCard({ label, value, helper }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm font-semibold text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
-      <p className="mt-2 text-sm text-slate-500">{helper}</p>
-    </div>
-  );
+  return Math.min(100, Math.round((part / total) * 100));
 }
 
 function Hint({ text }) {
   return (
     <span className="group relative inline-flex">
       <Info className="h-4 w-4 cursor-help text-slate-400" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-64 -translate-x-1/2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold leading-5 text-white opacity-0 shadow-xl transition group-hover:opacity-100">
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-64 -translate-x-1/2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-medium leading-5 text-white opacity-0 shadow-xl transition duration-200 group-hover:opacity-100">
         {text}
       </span>
     </span>
@@ -88,73 +92,545 @@ function Hint({ text }) {
 
 function FieldLabel({ children, hint }) {
   return (
-    <span className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-700">
+    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
       {children}
       {hint ? <Hint text={hint} /> : null}
     </span>
   );
 }
 
-function HorizonColumn({ horizon, tasks, isLoading, error }) {
-  const summary = useMemo(() => calculateSummary(tasks), [tasks]);
-  const progress =
-    summary.allocated > 0
-      ? Math.min(100, Math.round((summary.spent / summary.allocated) * 100))
-      : 0;
+function MetricCard({ icon: Icon, label, value, helper }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+          <Icon className="h-5 w-5" />
+        </div>
+        <p className="text-2xl font-bold text-slate-950">{value}</p>
+      </div>
+      <p className="mt-3 text-sm font-semibold text-slate-700">{label}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
+    </div>
+  );
+}
+
+function ProgressLine({ label, value, helper }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">{label}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
+        </div>
+        <p className="text-lg font-bold text-slate-950">{value}%</p>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-slate-100">
+        <div
+          className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
+          style={{ width: `${value}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, description, icon: Icon = LayoutDashboard }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+        <Icon className="h-6 w-6" />
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-slate-950">{title}</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function TaskComposer({
+  form,
+  setForm,
+  onSubmit,
+  isCreating,
+  createError,
+  activeHorizon,
+}) {
+  return (
+    <form
+      id="create-task"
+      onSubmit={onSubmit}
+      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+            <Plus className="h-4 w-4" />
+            Create task
+          </p>
+          <h2 className="mt-1 text-xl font-bold text-slate-950">
+            One intake for every horizon
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            Add a task once, then choose whether it belongs to the day, week,
+            month, or year.
+          </p>
+        </div>
+        {activeHorizon ? (
+          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+            Filtering {activeHorizon.title}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid min-w-0 gap-4">
+        <label className="min-w-0">
+          <FieldLabel hint="Use a short action title, not a long paragraph.">
+            Task title
+          </FieldLabel>
+          <input
+            value={form.title}
+            onChange={(event) => setForm({ ...form, title: event.target.value })}
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            placeholder="Example: Prepare weekly client update"
+            required
+          />
+        </label>
+
+        <label className="min-w-0">
+          <FieldLabel hint="Optional context that explains the expected result.">
+            Description
+          </FieldLabel>
+          <input
+            value={form.description}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            placeholder="Short note or outcome"
+          />
+        </label>
+
+        <div className="grid min-w-0 gap-4 md:grid-cols-3">
+          <label className="min-w-0">
+            <FieldLabel hint="All work is a task. The horizon decides its planning window.">
+              Horizon
+            </FieldLabel>
+            <select
+              value={form.timeHorizon}
+              onChange={(event) => setForm({ ...form, timeHorizon: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            >
+              {HORIZONS.map((horizon) => (
+                <option key={horizon.key} value={horizon.key}>
+                  {horizon.title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="min-w-0">
+            <FieldLabel hint="Planned effort in minutes. 60 means one hour.">
+              Planned minutes
+            </FieldLabel>
+            <input
+              type="number"
+              min="1"
+              value={form.timeAllocated}
+              onChange={(event) => setForm({ ...form, timeAllocated: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="60"
+            />
+          </label>
+
+          <label className="min-w-0">
+            <FieldLabel hint="Optional reminder. Leave empty if this task does not need an alarm.">
+              Alarm time
+            </FieldLabel>
+            <input
+              type="datetime-local"
+              value={form.alarmTime}
+              onChange={(event) => setForm({ ...form, alarmTime: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+      </div>
+
+      {createError ? (
+        <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {createError}
+        </p>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={isCreating}
+        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition duration-200 hover:bg-emerald-700 disabled:bg-slate-300 sm:w-auto"
+      >
+        <Plus className="h-4 w-4" />
+        {isCreating ? "Creating" : "Create task"}
+      </button>
+    </form>
+  );
+}
+
+function HorizonSummary({ horizon, tasks }) {
+  const summary = calculateSummary(tasks);
+  const progress = percentage(summary.spent, summary.allocated);
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="border-b border-slate-200 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">{horizon.title}</h3>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              {horizon.subtitle}
-            </p>
-          </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">
-            {tasks.length}
-          </span>
+    <Link
+      href={`/dashboard?view=${horizon.view}`}
+      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-slate-950">{horizon.title}</h3>
+          <p className="mt-1 text-sm text-slate-500">{horizon.subtitle}</p>
         </div>
-        <div className="mt-5">
-          <div className="mb-2 flex justify-between text-sm">
-            <span className="font-semibold text-slate-600">Progress</span>
-            <span className="font-bold text-slate-900">{progress}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-slate-100">
-            <div
-              className="h-2 rounded-full bg-emerald-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      </header>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+          {tasks.length}
+        </span>
+      </div>
+      <div className="mt-4 h-2 rounded-full bg-slate-100">
+        <div
+          className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs font-medium text-slate-500">
+        {formatHours(summary.spent)} spent of {formatHours(summary.allocated)} planned
+      </p>
+    </Link>
+  );
+}
 
-      <div className="space-y-4 p-4">
+function TaskList({ tasks, isLoading, error, title, emptyCopy, onPatch, onDelete, busyTaskId }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{tasks.length} task records</p>
+        </div>
+      </div>
+
+      <div className="mt-5">
         {isLoading ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-            Loading tasks...
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="h-52 animate-pulse rounded-2xl bg-slate-100" />
+            ))}
           </div>
         ) : null}
 
         {error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
             {error}
           </div>
         ) : null}
 
         {!isLoading && !error && tasks.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-bold text-slate-900">No tasks assigned</p>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              This horizon is clear and ready for planning.
-            </p>
-          </div>
+          <EmptyState
+            title="No tasks here yet"
+            description={emptyCopy}
+          />
         ) : null}
 
-        {tasks.map((task) => (
-          <TaskCard key={task._id} task={task} />
-        ))}
+        {!isLoading && !error && tasks.length > 0 ? (
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task._id}
+                task={task}
+                onPatch={onPatch}
+                onDelete={onDelete}
+                isBusy={busyTaskId === task._id}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function InsightsView({ allTasks, summary }) {
+  const completionRate = percentage(summary.completed, allTasks.length);
+  const alarmRate = percentage(summary.alarms, allTasks.length);
+  const utilizationRate = percentage(summary.spent, summary.allocated);
+  const activeRate = percentage(summary.active, allTasks.length);
+
+  if (allTasks.length === 0) {
+    return (
+      <EmptyState
+        icon={Activity}
+        title="Insights start after your first task"
+        description="Create tasks with planned time and horizons. Track Time will then calculate completion, alarm coverage, active workload, and time utilization from your real data."
+      />
+    );
+  }
+
+  return (
+    <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-bold text-emerald-700">Real workspace insights</p>
+        <h2 className="mt-2 text-2xl font-bold text-slate-950">
+          Based on your current tasks
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
+          This page does not use fake health scores. It reads task status,
+          planned time, tracked time, and alarms from your workspace.
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <MetricCard icon={CheckCircle2} label="Completed" value={summary.completed} helper="Closed tasks" />
+          <MetricCard icon={Clock3} label="Active" value={summary.active} helper="Open work" />
+          <MetricCard icon={AlarmClock} label="Alarms" value={summary.alarms} helper="Scheduled reminders" />
+          <MetricCard icon={BarChart3} label="Spent" value={formatHours(summary.spent)} helper="Tracked time" />
+        </div>
+      </div>
+      <div className="space-y-3">
+        <ProgressLine label="Completion rate" value={completionRate} helper="Completed tasks compared with total tasks." />
+        <ProgressLine label="Time utilization" value={utilizationRate} helper="Tracked time compared with planned time." />
+        <ProgressLine label="Alarm coverage" value={alarmRate} helper="Tasks with reminder time enabled." />
+        <ProgressLine label="Active workload" value={activeRate} helper="Open tasks that still need action." />
+      </div>
+    </section>
+  );
+}
+
+function CompletedView({ tasks, summary, onPatch, onDelete, busyTaskId }) {
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard icon={CheckCircle2} label="Completed tasks" value={tasks.length} helper="Finished across horizons" />
+        <MetricCard icon={Clock3} label="Completed time" value={formatHours(summary.spent)} helper="Tracked or planned closed work" />
+        <MetricCard icon={Target} label="Completion rate" value={`${percentage(tasks.length, tasks.length + summary.active)}%`} helper="Closed vs open workload" />
+      </div>
+      <TaskList
+        title="Completed work"
+        tasks={tasks}
+        isLoading={false}
+        emptyCopy="Tasks marked Done will appear here with their horizon and tracked time."
+        onPatch={onPatch}
+        onDelete={onDelete}
+        busyTaskId={busyTaskId}
+      />
+    </section>
+  );
+}
+
+function ProfileView({
+  profileForm,
+  setProfileForm,
+  onSubmit,
+  isSavingProfile,
+  profileMessage,
+  profileError,
+}) {
+  return (
+    <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+      <form
+        onSubmit={onSubmit}
+        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <UserRound className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-950">Profile settings</h2>
+            <p className="mt-1 text-sm text-slate-500">Update your account details.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4">
+          <label>
+            <FieldLabel hint="Shown in the dashboard header.">
+              Full name
+            </FieldLabel>
+            <input
+              value={profileForm.name}
+              onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="Your name"
+            />
+          </label>
+          <label>
+            <FieldLabel hint="Used for OTP messages and login.">
+              Email address
+            </FieldLabel>
+            <input
+              type="email"
+              value={profileForm.email}
+              onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              required
+            />
+          </label>
+          <label>
+            <FieldLabel hint="Optional. Leave blank if you only want email OTP login.">
+              New password
+            </FieldLabel>
+            <input
+              type="password"
+              value={profileForm.password}
+              onChange={(event) => setProfileForm({ ...profileForm, password: event.target.value })}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              placeholder="Minimum 8 characters"
+            />
+          </label>
+        </div>
+
+        {profileMessage ? (
+          <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            {profileMessage}
+          </p>
+        ) : null}
+        {profileError ? (
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {profileError}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={isSavingProfile}
+          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:bg-slate-300"
+        >
+          <Save className="h-4 w-4" />
+          {isSavingProfile ? "Saving" : "Save profile"}
+        </button>
+      </form>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <h2 className="mt-4 text-xl font-bold text-slate-950">Access methods</h2>
+        <div className="mt-4 grid gap-3">
+          {[
+            ["Email OTP", "Passwordless login and automatic registration."],
+            ["Password login", "Available after setting a password or for the configured admin account."],
+            ["Google login", "Button is prepared for Firebase credentials."],
+          ].map(([title, copy]) => (
+            <div key={title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-bold text-slate-950">{title}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-500">{copy}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AdminView({ user }) {
+  const [state, setState] = useState({
+    isLoading: user.role === "superadmin",
+    error: user.role === "superadmin" ? "" : "Superadmin access required.",
+    data: null,
+  });
+
+  useEffect(() => {
+    if (user.role !== "superadmin") {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/superadmin/analytics", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.error || "Unable to load analytics.");
+        }
+
+        setState({ isLoading: false, error: "", data: payload.data });
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          setState({ isLoading: false, error: error.message, data: null });
+        }
+      }
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [user.role]);
+
+  if (state.isLoading) {
+    return <EmptyState icon={ShieldCheck} title="Loading admin analytics" description="Fetching user, session, and task data." />;
+  }
+
+  if (state.error) {
+    return <EmptyState icon={ShieldCheck} title="Admin analytics unavailable" description={state.error} />;
+  }
+
+  const data = state.data;
+
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard icon={UserRound} label="Users" value={data.totalUsers} helper="All registered users" />
+        <MetricCard icon={ShieldCheck} label="Admins" value={data.totalSuperadmins} helper="Superadmin accounts" />
+        <MetricCard icon={LayoutDashboard} label="Tasks" value={data.totalTasks} helper="Platform-wide tasks" />
+        <MetricCard icon={Activity} label="Sessions" value={data.activeSessions} helper="Active sessions" />
+        <MetricCard icon={Clock3} label="7 day logins" value={data.loginsLast7Days} helper="Recent activity" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Horizon distribution</h2>
+          <div className="mt-4 space-y-3">
+            {data.tasksByHorizon.length === 0 ? (
+              <p className="text-sm text-slate-500">No tasks created yet.</p>
+            ) : null}
+            {data.tasksByHorizon.map((item) => (
+              <div key={item._id} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-bold text-slate-950">{String(item._id).replace("1_", "1 ")}</p>
+                  <p className="text-sm font-bold text-emerald-700">{item.count} tasks</p>
+                </div>
+                <p className="mt-1 text-sm text-slate-500">
+                  {formatHours(item.timeSpent)} spent of {formatHours(item.timeAllocated)} planned
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-5">
+            <h2 className="text-lg font-bold text-slate-950">Recent users</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Logins</th>
+                  <th className="px-4 py-3">Last Login</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {data.recentUsers.map((item) => (
+                  <tr key={String(item._id)}>
+                    <td className="px-4 py-3 font-semibold text-slate-950">{item.email}</td>
+                    <td className="px-4 py-3 text-slate-600">{item.role}</td>
+                    <td className="px-4 py-3 text-slate-600">{item.loginCount}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatDate(item.lastLoginAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -164,12 +640,16 @@ export default function DashboardClient({ user }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
+  const normalizedView = activeView === "health" ? "insights" : activeView;
+  const activeHorizonKey = VIEW_TO_HORIZON[normalizedView];
+  const activeHorizon = HORIZONS.find((horizon) => horizon.key === activeHorizonKey);
   const [tasksByHorizon, setTasksByHorizon] = useState(
     Object.fromEntries(HORIZONS.map((horizon) => [horizon.key, []]))
   );
   const [errorsByHorizon, setErrorsByHorizon] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [busyTaskId, setBusyTaskId] = useState("");
   const [createError, setCreateError] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -177,7 +657,7 @@ export default function DashboardClient({ user }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
-    timeHorizon: "1_Day",
+    timeHorizon: activeHorizonKey || "1_Day",
     timeAllocated: 60,
     alarmTime: "",
   });
@@ -268,18 +748,61 @@ export default function DashboardClient({ user }) {
         throw new Error(payload.error || payload.errors?.join(" ") || "Unable to create task.");
       }
 
-      setForm({
+      setForm((current) => ({
+        ...current,
         title: "",
         description: "",
-        timeHorizon: "1_Day",
-        timeAllocated: 60,
         alarmTime: "",
-      });
+      }));
       await loadTasks();
     } catch (error) {
       setCreateError(error.message);
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function handleTaskPatch(task, updates) {
+    setBusyTaskId(task._id);
+
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: task._id, ...updates }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || payload.errors?.join(" ") || "Unable to update task.");
+      }
+
+      await loadTasks();
+    } catch (error) {
+      setCreateError(error.message);
+    } finally {
+      setBusyTaskId("");
+    }
+  }
+
+  async function handleTaskDelete(task) {
+    setBusyTaskId(task._id);
+
+    try {
+      const response = await fetch(`/api/tasks?id=${task._id}`, {
+        method: "DELETE",
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to delete task.");
+      }
+
+      await loadTasks();
+    } catch (error) {
+      setCreateError(error.message);
+    } finally {
+      setBusyTaskId("");
     }
   }
 
@@ -316,406 +839,125 @@ export default function DashboardClient({ user }) {
     }
   }
 
-  const allTasks = Object.values(tasksByHorizon).flat();
+  const allTasks = useMemo(() => Object.values(tasksByHorizon).flat(), [tasksByHorizon]);
   const portfolioSummary = calculateSummary(allTasks);
-  const totalProgress =
-    portfolioSummary.allocated > 0
-      ? Math.min(100, Math.round((portfolioSummary.spent / portfolioSummary.allocated) * 100))
-      : 0;
-  const healthScore = Math.max(52, Math.min(96, 70 + totalProgress / 3));
-  const visibleHorizons = VIEW_TO_HORIZON[activeView]
-    ? HORIZONS.filter((horizon) => horizon.key === VIEW_TO_HORIZON[activeView])
-    : HORIZONS;
   const completedTasks = allTasks.filter((task) => task.status === "completed");
-  const activeHorizon = HORIZONS.find((horizon) => horizon.key === VIEW_TO_HORIZON[activeView]);
-  const showHero = activeView === "overview";
-  const showHealth = activeView === "overview" || activeView === "health";
-  const showTaskIntake =
-    activeView === "overview" ||
-    activeView === "today" ||
-    activeView === "week" ||
-    activeView === "month" ||
-    activeView === "year";
-  const showHorizons = activeView !== "health" && activeView !== "completed";
-  const showCompleted = activeView === "completed";
-  const showProfile = activeView === "profile";
+  const visibleTasks =
+    normalizedView === "completed"
+      ? completedTasks
+      : activeHorizonKey
+        ? tasksByHorizon[activeHorizonKey] ?? []
+        : allTasks;
+  const visibleError = activeHorizonKey ? errorsByHorizon[activeHorizonKey] : "";
+  const totalProgress = percentage(portfolioSummary.spent, portfolioSummary.allocated);
+
+  if (normalizedView === "profile") {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <ProfileView
+          profileForm={profileForm}
+          setProfileForm={setProfileForm}
+          onSubmit={handleProfileUpdate}
+          isSavingProfile={isSavingProfile}
+          profileMessage={profileMessage}
+          profileError={profileError}
+        />
+      </div>
+    );
+  }
+
+  if (normalizedView === "insights") {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <InsightsView allTasks={allTasks} summary={portfolioSummary} />
+      </div>
+    );
+  }
+
+  if (normalizedView === "admin") {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <AdminView user={user} />
+      </div>
+    );
+  }
+
+  if (normalizedView === "completed") {
+    return (
+      <div className="mx-auto max-w-7xl space-y-5">
+        <CompletedView
+          tasks={completedTasks}
+          summary={portfolioSummary}
+          onPatch={handleTaskPatch}
+          onDelete={handleTaskDelete}
+          busyTaskId={busyTaskId}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6">
-      {showHero ? (
-      <section className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-white p-6 shadow-md shadow-emerald-100/50 md:p-8">
-        <div className="absolute right-8 top-8 hidden h-28 w-28 rounded-full bg-emerald-200/40 blur-2xl lg:block" />
-        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr] lg:items-center">
-          <div>
-            <p className="inline-flex rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-bold uppercase tracking-wide text-emerald-700 shadow-sm">
-              Daily operating rhythm
+    <div className="mx-auto max-w-7xl space-y-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-emerald-700">
+              Hello {getDisplayName(user)}
             </p>
-            <h2 className="mt-5 max-w-4xl text-3xl font-bold tracking-tight text-slate-950 md:text-5xl">
-              Late evening, {getDisplayName(user)} — your story starts today.
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+              Manage tasks by time horizon.
             </h2>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-500">
-              Convert execution intent into visible task horizons, measured time,
-              and scheduled reminders.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              Everything is a task. The horizon simply decides whether it belongs
+              to today, this week, this month, or this year.
             </p>
-            <a
-              href="#create-task"
-              className="mt-6 inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-            >
-              Create task
-            </a>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard label="Tasks" value={allTasks.length} helper="Across horizons" />
-            <StatCard label="Progress" value={`${totalProgress}%`} helper="Time utilized" />
-            <StatCard label="Spent" value={formatHours(portfolioSummary.spent)} helper="Tracked time" />
-            <StatCard label="Alarms" value={portfolioSummary.alarms} helper="Scheduled reminders" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[520px]">
+            <MetricCard icon={LayoutDashboard} label="Tasks" value={allTasks.length} helper="Total" />
+            <MetricCard icon={BarChart3} label="Progress" value={`${totalProgress}%`} helper="Time used" />
+            <MetricCard icon={Clock3} label="Spent" value={formatHours(portfolioSummary.spent)} helper="Tracked" />
+            <MetricCard icon={AlarmClock} label="Alarms" value={portfolioSummary.alarms} helper="Set" />
           </div>
         </div>
       </section>
-      ) : activeHorizon ? (
-        <section className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-black uppercase tracking-wide text-emerald-700">
-                {activeHorizon.subtitle}
-              </p>
-              <h2 className="mt-1 text-3xl font-black text-slate-950">
-                {activeHorizon.title}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Review only the tasks assigned to this horizon and add new work
-                without losing the command context.
-              </p>
-            </div>
-            <a
-              href="#create-task"
-              className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
-            >
-              Add task here
-            </a>
-          </div>
-        </section>
-      ) : null}
 
-      {showHealth || showTaskIntake ? (
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        {showHealth ? (
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center">
-            <div className="relative flex h-40 w-40 shrink-0 items-center justify-center rounded-full bg-slate-50">
-              <svg viewBox="0 0 120 120" className="h-40 w-40 rotate-[-90deg]">
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  fill="none"
-                  stroke="#e2e8f0"
-                  strokeWidth="12"
-                />
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  strokeDasharray={`${healthScore * 3.01} 301`}
-                />
-              </svg>
-              <div className="absolute text-center">
-                <p className="text-4xl font-bold text-slate-900">
-                  {Math.round(healthScore)}
-                </p>
-                <p className="text-xs font-bold uppercase text-slate-500">out of 100</p>
-              </div>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
-                Account Health
-              </p>
-              <h3 className="mt-2 text-2xl font-bold text-slate-900">
-                Good standing, room to grow
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Your workspace health improves as you add tasks, track time, and
-                keep alarms current across each horizon.
-              </p>
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <HealthMetric label="Lead Engagement" value="Medium" colorClass="bg-orange-400" widthClass="w-[62%]" />
-                <HealthMetric label="Reliability" value="High" colorClass="bg-emerald-500" widthClass="w-[86%]" />
-                <HealthMetric label="Activity Pattern" value="Low" colorClass="bg-red-400" widthClass="w-[24%]" />
-                <HealthMetric label="Response Quality" value="High" colorClass="bg-emerald-500" widthClass="w-[90%]" />
-              </div>
-            </div>
-          </div>
-        </div>
-        ) : null}
+      <TaskComposer
+        form={form}
+        setForm={setForm}
+        onSubmit={handleCreateTask}
+        isCreating={isCreating}
+        createError={createError}
+        activeHorizon={activeHorizon}
+      />
 
-        {showTaskIntake ? (
-        <form
-          id="create-task"
-          onSubmit={handleCreateTask}
-          className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70"
-        >
-          <div>
-            <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-emerald-700">
-              <CalendarClock className="h-4 w-4" />
-              Task Intake
-            </p>
-            <h3 className="mt-2 text-2xl font-bold text-slate-900">
-              Add a tracked task
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Add the task once, assign a time horizon, set planned minutes, and
-              optionally schedule an alarm.
-            </p>
-          </div>
-          <div className="mt-5 grid gap-4">
-            <label>
-              <FieldLabel hint="A concise execution name, for example: Prepare weekly operations report.">
-                Task title
-              </FieldLabel>
-              <input
-                value={form.title}
-                onChange={(event) => setForm({ ...form, title: event.target.value })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                placeholder="Task title"
-                required
-              />
-            </label>
-            <label>
-              <FieldLabel hint="Optional context that helps you remember the intended outcome.">
-                Description
-              </FieldLabel>
-              <input
-                value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                placeholder="Short description"
-              />
-            </label>
-            <div className="grid gap-4 md:grid-cols-3">
-              <label>
-                <FieldLabel hint="Choose whether this belongs to today, this week, this month, or this year.">
-                  Horizon
-                </FieldLabel>
-                <select
-                  value={form.timeHorizon}
-                  onChange={(event) => setForm({ ...form, timeHorizon: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                >
-                  {HORIZONS.map((horizon) => (
-                    <option key={horizon.key} value={horizon.key}>
-                      {horizon.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <FieldLabel hint="Planned effort in minutes. Example: 60 means one hour.">
-                  Planned minutes
-                </FieldLabel>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.timeAllocated}
-                  onChange={(event) => setForm({ ...form, timeAllocated: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  placeholder="Minutes"
-                />
-              </label>
-              <label>
-                <FieldLabel hint="Optional reminder time. Leave it empty if this task does not need an alarm.">
-                  Alarm time
-                </FieldLabel>
-                <input
-                  type="datetime-local"
-                  value={form.alarmTime}
-                  onChange={(event) => setForm({ ...form, alarmTime: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                />
-              </label>
-            </div>
-          </div>
-
-          {createError ? (
-            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              {createError}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={isCreating}
-            className="mt-5 w-full rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:bg-slate-300"
-          >
-            {isCreating ? "Saving task" : "Create task"}
-          </button>
-        </form>
-        ) : null}
-      </section>
-      ) : null}
-
-      {showProfile ? (
-        <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <form
-            onSubmit={handleProfileUpdate}
-            className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70"
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-                <UserRound className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
-                  Workspace Profile
-                </p>
-                <h3 className="mt-1 text-2xl font-black text-slate-950">
-                  Update account details
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Manage your name, login email, and optional password access
-                  from one secure profile screen.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              <label>
-                <FieldLabel hint="This name appears in your dashboard header and welcome message.">
-                  Full name
-                </FieldLabel>
-                <input
-                  value={profileForm.name}
-                  onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  placeholder="Your name"
-                />
-              </label>
-              <label>
-                <FieldLabel hint="Changing email changes the address used for future OTP messages.">
-                  Email address
-                </FieldLabel>
-                <input
-                  type="email"
-                  value={profileForm.email}
-                  onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  placeholder="you@example.com"
-                  required
-                />
-              </label>
-              <label>
-                <FieldLabel hint="Set a password only if you want password login in addition to OTP. Minimum 8 characters.">
-                  New password
-                </FieldLabel>
-                <input
-                  type="password"
-                  value={profileForm.password}
-                  onChange={(event) => setProfileForm({ ...profileForm, password: event.target.value })}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  placeholder="Leave blank to keep current password"
-                />
-              </label>
-            </div>
-
-            {profileMessage ? (
-              <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                {profileMessage}
-              </p>
-            ) : null}
-            {profileError ? (
-              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                {profileError}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={isSavingProfile}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:bg-slate-300"
-            >
-              <Save className="h-4 w-4" />
-              {isSavingProfile ? "Saving profile" : "Save profile"}
-            </button>
-          </form>
-
-          <div className="rounded-[2rem] border border-slate-200 bg-slate-950 p-6 text-white shadow-md shadow-slate-200/70">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-200">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <h3 className="mt-5 text-2xl font-black">
-              Secure access options
-            </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
-              Track Time supports OTP-first access for regular users and password
-              login for configured admin accounts. Google login is prepared for
-              Firebase credentials when you are ready to add them.
-            </p>
-            <div className="mt-6 grid gap-3">
-              {[
-                ["Email OTP", "Passwordless login and automatic registration."],
-                ["Password login", "Available for admin and users who set a password."],
-                ["Profile control", "Update name, email, and password from dashboard."],
-              ].map(([title, copy]) => (
-                <div key={title} className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <p className="text-sm font-black text-emerald-200">{title}</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-300">{copy}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {showCompleted ? (
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
-                Completed Work
-              </p>
-              <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                Finished tasks across all horizons
-              </h3>
-            </div>
-            <span className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
-              {completedTasks.length} completed
-            </span>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {completedTasks.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-bold text-slate-900">
-                  No completed tasks yet
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Completed tasks will appear here once you start closing work.
-                </p>
-              </div>
-            ) : null}
-            {completedTasks.map((task) => (
-              <TaskCard key={task._id} task={task} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {showHorizons && !showProfile ? (
-      <section className="grid gap-5 xl:grid-cols-4">
-        {visibleHorizons.map((horizon) => (
-          <HorizonColumn
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {HORIZONS.map((horizon) => (
+          <HorizonSummary
             key={horizon.key}
             horizon={horizon}
             tasks={tasksByHorizon[horizon.key] ?? []}
-            isLoading={isLoading}
-            error={errorsByHorizon[horizon.key]}
           />
         ))}
       </section>
-      ) : null}
+
+      <TaskList
+        title={
+          activeHorizon
+            ? `${activeHorizon.title} tasks`
+            : "All active tasks"
+        }
+        tasks={visibleTasks}
+        isLoading={isLoading}
+        error={visibleError}
+        emptyCopy={
+          activeHorizon
+            ? `Create a task and select ${activeHorizon.title} as the horizon.`
+            : "Create your first task from the single intake form above."
+        }
+        onPatch={handleTaskPatch}
+        onDelete={handleTaskDelete}
+        busyTaskId={busyTaskId}
+      />
     </div>
   );
 }
