@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import TaskCard from "../../components/TaskCard";
 
@@ -10,6 +11,11 @@ const HORIZONS = [
   { key: "1_Month", title: "This Month", subtitle: "Monthly delivery" },
   { key: "1_Year", title: "This Year", subtitle: "Annual priorities" },
 ];
+
+const VIEW_TO_HORIZON = {
+  today: "1_Day",
+  week: "1_Week",
+};
 
 function getDisplayName(email) {
   return email?.split("@")[0]?.replace(/[._-]+/g, " ") || "User";
@@ -126,6 +132,8 @@ function HorizonColumn({ horizon, tasks, isLoading, error }) {
 }
 
 export default function DashboardClient({ user }) {
+  const searchParams = useSearchParams();
+  const activeView = searchParams.get("view") || "overview";
   const [tasksByHorizon, setTasksByHorizon] = useState(
     Object.fromEntries(HORIZONS.map((horizon) => [horizon.key, []]))
   );
@@ -244,16 +252,25 @@ export default function DashboardClient({ user }) {
       ? Math.min(100, Math.round((portfolioSummary.spent / portfolioSummary.allocated) * 100))
       : 0;
   const healthScore = Math.max(52, Math.min(96, 70 + totalProgress / 3));
+  const visibleHorizons = VIEW_TO_HORIZON[activeView]
+    ? HORIZONS.filter((horizon) => horizon.key === VIEW_TO_HORIZON[activeView])
+    : HORIZONS;
+  const completedTasks = allTasks.filter((task) => task.status === "completed");
+  const showHealth = activeView === "overview" || activeView === "health";
+  const showTaskIntake = activeView === "overview" || activeView === "today" || activeView === "week";
+  const showHorizons = activeView !== "health" && activeView !== "completed";
+  const showCompleted = activeView === "completed";
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-white p-6 shadow-sm md:p-8">
+      <section className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-white p-6 shadow-md shadow-emerald-100/50 md:p-8">
+        <div className="absolute right-8 top-8 hidden h-28 w-28 rounded-full bg-emerald-200/40 blur-2xl lg:block" />
         <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr] lg:items-center">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+            <p className="inline-flex rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-bold uppercase tracking-wide text-emerald-700 shadow-sm">
               Daily operating rhythm
             </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+            <h2 className="mt-5 max-w-4xl text-3xl font-bold tracking-tight text-slate-950 md:text-5xl">
               Late evening, {getDisplayName(user.email)} — your story starts today.
             </h2>
             <p className="mt-3 max-w-3xl text-base leading-7 text-slate-500">
@@ -277,8 +294,10 @@ export default function DashboardClient({ user }) {
         </div>
       </section>
 
+      {showHealth || showTaskIntake ? (
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {showHealth ? (
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70">
           <div className="flex flex-col gap-5 md:flex-row md:items-center">
             <div className="relative flex h-40 w-40 shrink-0 items-center justify-center rounded-full bg-slate-50">
               <svg viewBox="0 0 120 120" className="h-40 w-40 rotate-[-90deg]">
@@ -328,11 +347,13 @@ export default function DashboardClient({ user }) {
             </div>
           </div>
         </div>
+        ) : null}
 
+        {showTaskIntake ? (
         <form
           id="create-task"
           onSubmit={handleCreateTask}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70"
         >
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
@@ -399,10 +420,46 @@ export default function DashboardClient({ user }) {
             {isCreating ? "Saving task" : "Create task"}
           </button>
         </form>
+        ) : null}
       </section>
+      ) : null}
 
+      {showCompleted ? (
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/70">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-emerald-700">
+                Completed Work
+              </p>
+              <h3 className="mt-2 text-2xl font-bold text-slate-950">
+                Finished tasks across all horizons
+              </h3>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
+              {completedTasks.length} completed
+            </span>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {completedTasks.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-sm font-bold text-slate-900">
+                  No completed tasks yet
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Completed tasks will appear here once you start closing work.
+                </p>
+              </div>
+            ) : null}
+            {completedTasks.map((task) => (
+              <TaskCard key={task._id} task={task} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {showHorizons ? (
       <section className="grid gap-5 xl:grid-cols-4">
-        {HORIZONS.map((horizon) => (
+        {visibleHorizons.map((horizon) => (
           <HorizonColumn
             key={horizon.key}
             horizon={horizon}
@@ -412,6 +469,7 @@ export default function DashboardClient({ user }) {
           />
         ))}
       </section>
+      ) : null}
     </div>
   );
 }

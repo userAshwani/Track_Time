@@ -8,6 +8,19 @@ import {
   Target,
 } from "lucide-react";
 
+const LOGO_URL = "https://ashwanitiwari.com/logo.png";
+
+function LogoMark({ className = "h-11 w-11" }) {
+  return (
+    <span
+      aria-label="Track Time"
+      role="img"
+      className={`${className} block rounded-2xl bg-white bg-contain bg-center bg-no-repeat shadow-sm`}
+      style={{ backgroundImage: `url(${LOGO_URL})` }}
+    />
+  );
+}
+
 const features = [
   {
     title: "Daily Focus",
@@ -37,9 +50,7 @@ export default function LandingPage() {
       <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-sm font-bold text-white">
-              TT
-            </span>
+            <LogoMark />
             <span className="text-lg font-bold tracking-tight text-slate-950">
               Track Time
             </span>
@@ -68,7 +79,8 @@ export default function LandingPage() {
 
       <section className="relative overflow-hidden bg-slate-50">
         <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-emerald-50 to-transparent" />
-        <div className="relative mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-28">
+        <div className="absolute right-0 top-24 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl" />
+        <div className="relative mx-auto grid max-w-7xl gap-12 px-6 py-16 lg:min-h-[calc(100vh-86px)] lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
           <div>
             <p className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
               Free time horizon management

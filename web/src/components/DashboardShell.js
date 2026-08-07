@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
   CalendarDays,
@@ -12,17 +12,32 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+const LOGO_URL = "https://ashwanitiwari.com/logo.png";
+
+function LogoMark({ className = "h-12 w-12" }) {
+  return (
+    <span
+      aria-label="Track Time"
+      role="img"
+      className={`${className} block rounded-2xl bg-white bg-contain bg-center bg-no-repeat shadow-sm`}
+      style={{ backgroundImage: `url(${LOGO_URL})` }}
+    />
+  );
+}
+
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard?view=today", label: "Today", icon: Clock3 },
-  { href: "/dashboard?view=week", label: "Weekly Plan", icon: CalendarDays },
-  { href: "/dashboard?view=completed", label: "Completed", icon: CheckCircle2 },
-  { href: "/dashboard?view=health", label: "Account Health", icon: Activity },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, view: "overview" },
+  { href: "/dashboard?view=today", label: "Today", icon: Clock3, view: "today" },
+  { href: "/dashboard?view=week", label: "Weekly Plan", icon: CalendarDays, view: "week" },
+  { href: "/dashboard?view=completed", label: "Completed", icon: CheckCircle2, view: "completed" },
+  { href: "/dashboard?view=health", label: "Account Health", icon: Activity, view: "health" },
 ];
 
 export default function DashboardShell({ user, children }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const activeView = searchParams.get("view") || "overview";
 
   async function handleLogout() {
     await fetch("/api/auth/logout", {
@@ -33,14 +48,12 @@ export default function DashboardShell({ user, children }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 lg:grid lg:grid-cols-[280px_1fr]">
-      <aside className="border-r border-slate-200 bg-white shadow-sm">
-        <div className="flex h-full min-h-screen flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-900 lg:grid lg:grid-cols-[292px_1fr]">
+      <aside className="border-r border-slate-200 bg-white shadow-sm lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto">
+        <div>
           <div className="border-b border-slate-200 px-6 py-6">
             <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-bold text-white">
-                TT
-              </div>
+              <LogoMark />
               <div>
                 <p className="text-lg font-bold tracking-tight text-slate-900">
                   Track Time
@@ -52,10 +65,11 @@ export default function DashboardShell({ user, children }) {
             </Link>
           </div>
 
-          <nav className="flex-1 space-y-1 px-4 py-5">
+          <nav className="space-y-1 px-4 py-5">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href.split("?")[0] && item.href === "/dashboard";
+              const isActive =
+                pathname === "/dashboard" && activeView === item.view;
 
               return (
                 <Link
@@ -87,6 +101,17 @@ export default function DashboardShell({ user, children }) {
               </Link>
             ) : null}
           </nav>
+
+          <div className="px-4 pb-5">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                Current plan
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                Free workspace, no paid cache
+              </p>
+            </div>
+          </div>
 
           <div className="border-t border-slate-200 p-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
