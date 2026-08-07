@@ -1,0 +1,15 @@
+{
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "outputDirectory": ".next",
+  "regions": ["bom1"],
+  "functions": {
+    "src/app/api/**/route.js": {
+      "maxDuration": 30
+    },
+    "src/app/api/**/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

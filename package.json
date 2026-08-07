@@ -1,0 +1,26 @@
+{
+  "name": "track_time",
+  "version": "1.0.0",
+  "description": "Track Time monorepo: Next.js web/API backend and Expo mobile app for time horizon task management.",
+  "main": "index.js",
+  "scripts": {
+    "dev:web": "npm run dev -w web",
+    "build:web": "npm run build -w web",
+    "lint:web": "npm run lint -w web",
+    "start:web": "npm run start -w web",
+    "start:mobile": "npm run start -w mobile",
+    "android:mobile": "npm run android -w mobile",
+    "ios:mobile": "npm run ios -w mobile",
+    "web:mobile": "npm run web -w mobile",
+    "typecheck:mobile": "npx tsc --noEmit -p mobile/tsconfig.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "private": true,
+  "workspaces": [
+    "web",
+    "mobile"
+  ]
+}
