@@ -1,0 +1,33 @@
+{
+  "name": "Track Time CRM",
+  "short_name": "Track Time",
+  "description": "Mobile-ready time and task CRM for daily planning, task tracking, and work analytics.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard"
+    },
+    {
+      "name": "Time Tracker",
+      "url": "/dashboard?view=timer"
+    },
+    {
+      "name": "Daily Schedule",
+      "url": "/dashboard?view=daily"
+    }
+  ]
+}

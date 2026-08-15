@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
+  Bell,
   CheckCircle2,
   Clock3,
+  Download,
+  Eye,
   ListChecks,
   MessageSquare,
+  Play,
   Plus,
   Save,
+  Square,
   Timer,
   Trash2,
   UserRound,
@@ -74,6 +79,18 @@ function createCodeashwaniDemoState(scheduleDate = todayString()) {
     ["demo-task-dsa", "demo-cat-mnc", "Solve 8 DSA problems for product companies", "Focus on arrays, strings, hashing, sliding window, and recursion patterns.", "high", "in_progress", 0, 2.5, 95],
     ["demo-task-dbms", "demo-cat-mnc", "Revise DBMS and operating systems notes", "Transactions, indexing, normalization, processes, threads, deadlocks, and memory.", "medium", "pending", 2, 2, 0],
     ["demo-task-mock", "demo-cat-mnc", "Mock interview answer practice", "Prepare crisp stories for freelancing, learning discipline, project ownership, and problem solving.", "medium", "pending", 5, 1.5, 0],
+    ["demo-task-react-query", "demo-cat-js", "Learn React Query data caching", "Practice server state, invalidation, optimistic updates, and loading states for CRM screens.", "medium", "in_progress", 2, 2, 50],
+    ["demo-task-tailwind", "demo-cat-js", "Polish Tailwind responsive layout", "Improve mobile cards, dense desktop grids, spacing rhythm, and table overflow.", "medium", "pending", 4, 2, 0],
+    ["demo-task-node-auth", "demo-cat-js", "Review Node.js authentication flow", "Study sessions, signed cookies, OTP mail flow, Google auth, and production env handling.", "high", "pending", 1, 2, 20],
+    ["demo-task-spring-security", "demo-cat-java", "Practice Spring Security JWT module", "Build login filters, password hashing, route authorization, and refresh-token notes.", "high", "pending", 6, 3, 0],
+    ["demo-task-sql", "demo-cat-java", "Solve SQL joins and indexing set", "Practice joins, grouping, subqueries, indexing tradeoffs, and query explanations.", "medium", "completed", -3, 2, 130],
+    ["demo-task-linux", "demo-cat-cyber", "Linux privilege and networking lab", "Practice permissions, processes, ports, nmap basics, logs, and secure SSH settings.", "medium", "completed", -4, 2.5, 155],
+    ["demo-task-burp", "demo-cat-cyber", "Burp Suite request replay practice", "Capture requests, test validation, inspect headers, and document safe findings.", "medium", "pending", 3, 2, 0],
+    ["demo-task-client-call", "demo-cat-freelance", "Follow up with CRM client lead", "Send progress summary, collect requirements, confirm analytics expectations, and next milestone.", "high", "pending", 0, 1, 0],
+    ["demo-task-invoice", "demo-cat-freelance", "Prepare freelance invoice template", "Create reusable invoice sections for domain, hosting, development, and support retainers.", "low", "completed", -5, 1, 60],
+    ["demo-task-portfolio-case", "demo-cat-site", "Publish Track Time CRM case study", "Write problem, stack, features, screenshots, deployment, and future roadmap for ashwanitiwari.com.", "high", "in_progress", 2, 2.5, 80],
+    ["demo-task-ats-resume", "demo-cat-mnc", "Update ATS resume for product roles", "Add Track Time CRM, Next.js, MongoDB, Firebase auth, and measurable outcomes.", "high", "pending", 1, 1.5, 0],
+    ["demo-task-system-design", "demo-cat-mnc", "System design notes for task CRM", "Cover scaling, indexes, queues, notification workers, analytics aggregation, and caching.", "medium", "pending", 7, 3, 0],
   ].map(([id, categoryId, title, description, priority, status, offset, estimatedHours, timeSpent], index) => ({
     _id: id,
     categoryId,
@@ -113,6 +130,12 @@ function createCodeashwaniDemoState(scheduleDate = todayString()) {
     };
   });
   const dailyData = [
+    { date: demoDate(-8).slice(0, 10), planned: 5, actual: 3.5, completion: 70 },
+    { date: demoDate(-7).slice(0, 10), planned: 6, actual: 4.2, completion: 70 },
+    { date: demoDate(-6).slice(0, 10), planned: 7, actual: 5.5, completion: 79 },
+    { date: demoDate(-5).slice(0, 10), planned: 5, actual: 1, completion: 20 },
+    { date: demoDate(-4).slice(0, 10), planned: 8, actual: 2.6, completion: 33 },
+    { date: demoDate(-3).slice(0, 10), planned: 6, actual: 2.2, completion: 37 },
     { date: demoDate(-2).slice(0, 10), planned: 6, actual: 2.1, completion: 35 },
     { date: demoDate(-1).slice(0, 10), planned: 7, actual: 3, completion: 43 },
     { date: todayString(), planned: 8, actual: 6.5, completion: 81 },
@@ -138,12 +161,16 @@ function createCodeashwaniDemoState(scheduleDate = todayString()) {
       hourlyBreakdown,
     },
     summary: {
-      totalPlanned: 34,
-      totalActual: 11.6,
-      completionRate: 34,
-      tasksCompleted: 2,
+      totalPlanned: dailyData.reduce((sum, day) => sum + day.planned, 0),
+      totalActual: Math.round(dailyData.reduce((sum, day) => sum + day.actual, 0) * 10) / 10,
+      completionRate: Math.round((dailyData.reduce((sum, day) => sum + day.actual, 0) / dailyData.reduce((sum, day) => sum + day.planned, 0)) * 100),
+      tasksCompleted: tasks.filter((task) => task.status === "completed").length,
       productiveDays: dailyData.filter((day) => day.actual > 0).map((day) => ({ date: day.date, dayOfWeek: new Date(day.date).toLocaleDateString("en", { weekday: "long" }), hours: day.actual })),
       dailyData,
+      dayOfWeekAverage: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => {
+        const rows = dailyData.filter((row) => new Date(row.date).toLocaleDateString("en", { weekday: "short" }) === day);
+        return { day, average: rows.length ? Math.round((rows.reduce((sum, row) => sum + row.actual, 0) / rows.length) * 10) / 10 : 0 };
+      }),
     },
     adminData: {},
     loading: false,
@@ -176,6 +203,61 @@ function Metric({ icon: Icon, label, value, helper, color = "text-emerald-700", 
       <p className="mt-3 text-sm font-semibold text-slate-700">{label}</p>
       <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </div>
+  );
+}
+
+function MiniBar({ label, value, max, color = "#059669", helper }) {
+  const width = max > 0 ? Math.max(4, Math.min(100, Math.round((Number(value || 0) / max) * 100))) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-600">
+        <span className="truncate">{label}</span>
+        <span>{helper ?? value}</span>
+      </div>
+      <div className="h-2.5 rounded-full bg-slate-100">
+        <div className="h-2.5 rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function InstallPrompt() {
+  const [event, setEvent] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    const onBeforeInstall = (installEvent) => {
+      installEvent.preventDefault();
+      setEvent(installEvent);
+    };
+    const onInstalled = () => setIsInstalled(true);
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (!event) return;
+    event.prompt();
+    await event.userChoice;
+    setEvent(null);
+  }
+
+  if (isInstalled || !event) return null;
+
+  return (
+    <button className={subtleButton} onClick={installApp}>
+      <Download className="h-4 w-4" />
+      Install app
+    </button>
   );
 }
 
@@ -344,11 +426,14 @@ function TasksView({ tasks, categories, reload }) {
   );
 }
 
-function CategoriesView({ categories, reload }) {
+function CategoriesView({ categories, tasks, reload }) {
   const [form, setForm] = useState({ name: "", color: COLORS[3], icon: "folder" });
   const [editing, setEditing] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const activeForm = editing || form;
   const setActiveForm = editing ? setEditing : setForm;
+  const selectedCategory = categories.find((category) => category._id === selectedCategoryId);
+  const selectedTasks = selectedCategoryId ? tasks.filter((task) => String(task.categoryId) === String(selectedCategoryId)) : [];
 
   async function saveCategory(event) {
     event.preventDefault();
@@ -403,7 +488,8 @@ function CategoriesView({ categories, reload }) {
                 <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-green-700">{category.completedTasks}</p><p className="text-xs text-slate-500">Completed</p></div>
               </div>
               <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full" style={{ width: `${completion}%`, backgroundColor: category.color }} /></div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button className={subtleButton} onClick={() => setSelectedCategoryId(category._id)}><Eye className="h-4 w-4" />View</button>
                 <button className={subtleButton} onClick={() => setEditing(category)}>Edit</button>
                 <button className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteCategory(category)}>Delete</button>
               </div>
@@ -411,13 +497,53 @@ function CategoriesView({ categories, reload }) {
           );
         })}
       </div>
+      {selectedCategory ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-500">Category tasks</p>
+              <h2 className="text-2xl font-bold" style={{ color: selectedCategory.color }}>{selectedCategory.name}</h2>
+            </div>
+            <button className={subtleButton} onClick={() => setSelectedCategoryId("")}>Close</button>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {selectedTasks.map((task) => {
+              const estimate = Number(task.estimatedHours) || hours(task.timeAllocated);
+              const logged = hours(task.timeSpent);
+              const progress = estimate > 0 ? Math.min(100, Math.round((logged / estimate) * 100)) : 0;
+              return (
+                <div key={task._id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-bold text-slate-950">{task.title}</h3>
+                    <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-600">{task.status.replace("_", " ")}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-500">{task.description}</p>
+                  <MiniBar label="Progress" value={progress} max={100} color={selectedCategory.color} helper={`${logged}h / ${estimate}h`} />
+                </div>
+              );
+            })}
+          </div>
+          {selectedTasks.length === 0 ? <p className="mt-5 text-sm font-semibold text-slate-500">No tasks in this category yet.</p> : null}
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function TimerView({ timeData, reload }) {
   const [form, setForm] = useState({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
+  const [activeTimer, setActiveTimer] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const totalToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
+  const activeTask = timeData.tasks?.find((task) => task._id === activeTimer?.taskId);
+
+  useEffect(() => {
+    if (!activeTimer) return undefined;
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activeTimer.startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeTimer]);
 
   async function saveLog(event) {
     event.preventDefault();
@@ -438,8 +564,59 @@ function TimerView({ timeData, reload }) {
     await reload();
   }
 
+  function startTimer() {
+    if (!form.taskId) {
+      alert("Choose a task first.");
+      return;
+    }
+    const startedAt = Date.now();
+    setActiveTimer({ taskId: form.taskId, startedAt });
+    setElapsedSeconds(0);
+    setForm((current) => ({ ...current, startTime: toLocalInput(new Date(startedAt)), endTime: "" }));
+  }
+
+  async function stopTimer() {
+    if (!activeTimer) return;
+    const endTime = new Date();
+    const durationMinutes = Math.max(1, Math.round((endTime.getTime() - activeTimer.startedAt) / 60000));
+    const response = await fetch("/api/time-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: activeTimer.taskId,
+        startTime: new Date(activeTimer.startedAt),
+        endTime,
+        durationMinutes,
+        notes: form.notes || "Tracked with start/stop timer.",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) {
+      alert(payload.error || "Unable to save tracked time.");
+      return;
+    }
+    setActiveTimer(null);
+    setElapsedSeconds(0);
+    setForm({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
+    await reload();
+  }
+
   return (
-    <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+    <section className="space-y-5">
+      <div className="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <p className="text-sm font-bold text-emerald-700">Live tracker</p>
+            <h2 className="mt-1 text-2xl font-bold text-slate-950">{activeTask?.title || "Select a task and start tracking"}</h2>
+            <p className="mt-1 text-sm text-slate-500">{activeTimer ? `Running for ${Math.floor(elapsedSeconds / 3600)}h ${Math.floor((elapsedSeconds % 3600) / 60)}m ${elapsedSeconds % 60}s` : "Track actual work time directly from this CRM."}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={primaryButton} onClick={startTimer} disabled={Boolean(activeTimer)}><Play className="h-4 w-4" />Start</button>
+            <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:bg-slate-300" onClick={stopTimer} disabled={!activeTimer}><Square className="h-4 w-4" />Stop</button>
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <form onSubmit={saveLog} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-bold text-slate-950">Manual Time Entry</h2>
         <div className="mt-4 grid gap-4">
@@ -470,6 +647,7 @@ function TimerView({ timeData, reload }) {
           {timeData.todayLogs?.length === 0 ? <p className="text-sm text-slate-500">No time logs for today yet.</p> : null}
         </div>
       </div>
+      </div>
     </section>
   );
 }
@@ -478,6 +656,7 @@ function DailyView({ scheduleData, reload }) {
   const [date, setDate] = useState(scheduleData.date || todayString());
   const [plannedHours, setPlannedHours] = useState(scheduleData.schedule?.plannedHours ?? 8);
   const [taskId, setTaskId] = useState("");
+  const completion = scheduleData.schedule?.plannedHours ? Math.min(100, Math.round((scheduleData.schedule.actualHours / scheduleData.schedule.plannedHours) * 100)) : 0;
 
   async function loadDate(nextDate) {
     setDate(nextDate);
@@ -503,7 +682,11 @@ function DailyView({ scheduleData, reload }) {
           <div className="grid gap-4 md:grid-cols-3">
             <Metric icon={Clock3} label="Planned" value={`${scheduleData.schedule?.plannedHours ?? 0}h`} helper="Target hours" />
             <Metric icon={CheckCircle2} label="Actual" value={`${scheduleData.schedule?.actualHours ?? 0}h`} helper="Logged hours" color="text-green-700" bg="bg-green-50" />
-            <Metric icon={BarChart3} label="Complete" value={`${scheduleData.schedule?.plannedHours ? Math.round((scheduleData.schedule.actualHours / scheduleData.schedule.plannedHours) * 100) : 0}%`} helper="Actual vs planned" color="text-amber-700" bg="bg-amber-50" />
+            <Metric icon={BarChart3} label="Complete" value={`${completion}%`} helper="Actual vs planned" color="text-amber-700" bg="bg-amber-50" />
+          </div>
+          <div className="mt-5 rounded-lg bg-slate-50 p-4">
+            <div className="mb-2 flex justify-between text-sm font-bold text-slate-600"><span>Daily completion</span><span>{completion}%</span></div>
+            <div className="h-3 rounded-full bg-white"><div className="h-3 rounded-full bg-emerald-600" style={{ width: `${completion}%` }} /></div>
           </div>
           <div className="mt-5 flex gap-2">
             <select className={inputClass} value={taskId} onChange={(event) => setTaskId(event.target.value)}>
@@ -529,6 +712,9 @@ function DailyView({ scheduleData, reload }) {
 }
 
 function SummaryView({ summary }) {
+  const maxActual = Math.max(...(summary.dailyData || []).map((row) => Number(row.actual || 0)), 1);
+  const maxPlanned = Math.max(...(summary.dailyData || []).map((row) => Number(row.planned || 0)), 1);
+  const maxDayAverage = Math.max(...(summary.dayOfWeekAverage || []).map((row) => Number(row.average || 0)), 1);
   return (
     <section className="space-y-5">
       <div className="grid gap-4 md:grid-cols-4">
@@ -536,6 +722,28 @@ function SummaryView({ summary }) {
         <Metric icon={CheckCircle2} label="Actual" value={`${summary.totalActual || 0}h`} helper="Logged" color="text-green-700" bg="bg-green-50" />
         <Metric icon={BarChart3} label="Completion" value={`${summary.completionRate || 0}%`} helper="Actual vs planned" color="text-amber-700" bg="bg-amber-50" />
         <Metric icon={ListChecks} label="Tasks Done" value={summary.tasksCompleted || 0} helper="Completed" color="text-sky-700" bg="bg-sky-50" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Planned vs actual trend</h2>
+          <div className="mt-5 space-y-4">
+            {summary.dailyData?.map((row) => (
+              <div key={`trend-${row.date}`} className="space-y-2">
+                <div className="flex justify-between text-xs font-bold text-slate-500"><span>{row.date}</span><span>{row.actual}h of {row.planned}h</span></div>
+                <div className="space-y-1">
+                  <div className="h-2 rounded-full bg-emerald-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${Math.min(100, (row.actual / maxActual) * 100)}%` }} /></div>
+                  <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-slate-400" style={{ width: `${Math.min(100, (row.planned / maxPlanned) * 100)}%` }} /></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Best weekdays</h2>
+          <div className="mt-5 space-y-3">
+            {summary.dayOfWeekAverage?.map((row) => <MiniBar key={row.day} label={row.day} value={row.average} max={maxDayAverage} helper={`${row.average}h avg`} />)}
+          </div>
+        </div>
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -593,6 +801,16 @@ function Overview({ user, tasks, timeData }) {
   const pendingTasks = tasks.filter((task) => task.status === "pending").length;
   const timeSpentToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
   const productivityScore = Math.round((totalTasksToday ? (completedTasksToday / totalTasksToday) * 50 : 0) + Math.min(timeSpentToday * 5, 50));
+  const todayPending = tasks.filter((task) => task.dueDate?.slice(0, 10) === today && task.status !== "completed").sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  const upcoming = tasks.filter((task) => task.dueDate && task.dueDate.slice(0, 10) > today && task.status !== "completed").sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 6);
+  const categoryHours = Object.values(tasks.reduce((acc, task) => {
+    const category = task.category || { _id: "uncategorized", name: "Uncategorized", color: "#64748B" };
+    acc[category._id] ||= { ...category, hours: 0, tasks: 0 };
+    acc[category._id].hours += hours(task.timeSpent);
+    acc[category._id].tasks += 1;
+    return acc;
+  }, {}));
+  const maxCategoryHours = Math.max(...categoryHours.map((item) => item.hours), 1);
   const focus = Object.values(tasks.filter((task) => task.status === "pending" && task.category).reduce((acc, task) => {
     acc[task.category._id] ||= { ...task.category, tasksCount: 0 };
     acc[task.category._id].tasksCount += 1;
@@ -613,6 +831,49 @@ function Overview({ user, tasks, timeData }) {
         <Metric icon={ListChecks} label="Pending Tasks" value={pendingTasks} helper="Need attention" color="text-red-700" bg="bg-red-50" />
       </div>
       {focus ? <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Today&apos;s Focus</p><h3 className="mt-1 text-xl font-bold" style={{ color: focus.color }}>{focus.name}</h3><p className="mt-1 text-sm text-slate-500">{focus.tasksCount} pending tasks in this category</p></div> : null}
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-slate-950">Pending today</h2>
+            <Bell className="h-5 w-5 text-emerald-700" />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {todayPending.map((task) => (
+              <div key={task._id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-bold text-slate-950">{task.title}</p>
+                  <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-red-700">{task.priority}</span>
+                </div>
+                <p className="mt-2 text-sm text-slate-500">{task.category?.name || "No category"} - due {new Date(task.dueDate).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>
+              </div>
+            ))}
+            {todayPending.length === 0 ? <p className="text-sm font-semibold text-slate-500">No pending tasks due today.</p> : null}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Upcoming notifications</h2>
+          <div className="mt-4 space-y-3">
+            {upcoming.map((task) => (
+              <div key={task._id} className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 p-3">
+                <div>
+                  <p className="font-bold text-slate-950">{task.title}</p>
+                  <p className="text-xs font-semibold text-emerald-700">{formatDate(task.dueDate)} - {task.category?.name || "No category"}</p>
+                </div>
+                <Bell className="h-4 w-4 text-emerald-700" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-slate-950">Workload by category</h2>
+          <InstallPrompt />
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {categoryHours.map((item) => <MiniBar key={item._id} label={`${item.name} (${item.tasks} tasks)`} value={item.hours} max={maxCategoryHours} color={item.color} helper={`${item.hours}h`} />)}
+        </div>
+      </div>
       <FeedbackBox />
     </section>
   );
@@ -826,7 +1087,7 @@ export default function DashboardClient({ user }) {
       if (
         user.email === "codeashwani@gmail.com" &&
         !demoSeededRef.current &&
-        ((tasks.data || []).length < 10 || (categories.data || []).length < 6)
+        ((tasks.data || []).length < 20 || (categories.data || []).length < 6)
       ) {
         demoSeededRef.current = true;
         const seedResponse = await fetch("/api/superadmin/seed-demo", { method: "POST" });
@@ -860,9 +1121,9 @@ export default function DashboardClient({ user }) {
     if (state.loading) return <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500">Loading workspace...</p>;
     if (state.error) return <p className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">{state.error}</p>;
     if (activeView === "tasks") return <TasksView tasks={state.tasks} categories={state.categories} reload={load} />;
-    if (activeView === "categories") return <CategoriesView categories={state.categories} reload={load} />;
+    if (activeView === "categories") return <CategoriesView categories={state.categories} tasks={state.tasks} reload={load} />;
     if (activeView === "timer") return <TimerView timeData={state.timeData} reload={load} />;
-    if (activeView === "daily") return <DailyView scheduleData={state.scheduleData} reload={load} />;
+    if (activeView === "daily") return <DailyView key={state.scheduleData.date || "daily"} scheduleData={state.scheduleData} reload={load} />;
     if (activeView === "summary") return <SummaryView summary={state.summary} />;
     if (activeView === "profile") return <ProfileView user={user} />;
     if (activeView === "admin") return <AdminView data={state.adminData} reload={load} />;

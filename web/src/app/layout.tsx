@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Track Time",
   description: "Enterprise time horizon task management platform",
+  manifest: "/manifest.webmanifest",
+  applicationName: "Track Time",
+  appleWebApp: {
+    capable: true,
+    title: "Track Time",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#059669",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
