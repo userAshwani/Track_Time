@@ -2,8 +2,9 @@ import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
-export const TASK_STATUSES = ["pending", "in_progress", "completed", "archived"];
+export const TASK_STATUSES = ["pending", "in_progress", "completed", "cancelled", "archived"];
 export const TIME_HORIZONS = ["1_Day", "1_Week", "1_Month", "1_Year"];
+export const TASK_PRIORITIES = ["low", "medium", "high"];
 
 const TaskSchema = new Schema(
   {
@@ -11,6 +12,12 @@ const TaskSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
+    },
+    categoryId: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
       index: true,
     },
     title: {
@@ -32,15 +39,21 @@ const TaskSchema = new Schema(
       default: "pending",
       index: true,
     },
+    priority: {
+      type: String,
+      enum: TASK_PRIORITIES,
+      default: "medium",
+      index: true,
+    },
     timeHorizon: {
       type: String,
       enum: TIME_HORIZONS,
-      required: [true, "Time horizon is required."],
+      default: "1_Day",
       index: true,
     },
     timeAllocated: {
       type: Number,
-      required: [true, "Allocated time is required."],
+      default: 60,
       min: [1, "Allocated time must be at least 1 minute."],
       max: [525600, "Allocated time cannot exceed 1 year in minutes."],
       validate: {
@@ -73,6 +86,21 @@ const TaskSchema = new Schema(
       default: "",
       select: false,
     },
+    dueDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    estimatedHours: {
+      type: Number,
+      min: [0, "Estimated hours cannot be negative."],
+      default: null,
+    },
+    scheduleOrder: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -82,6 +110,7 @@ const TaskSchema = new Schema(
 
 TaskSchema.index({ timeHorizon: 1, status: 1, updatedAt: -1 });
 TaskSchema.index({ userId: 1, timeHorizon: 1, status: 1, updatedAt: -1 });
+TaskSchema.index({ userId: 1, dueDate: 1, scheduleOrder: 1 });
 TaskSchema.index({ isAlarmSet: 1, alarmTime: 1 });
 TaskSchema.index({ createdAt: -1 });
 

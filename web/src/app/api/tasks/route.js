@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import dbConnect from "../../../../lib/dbConnect.js";
 import { getCurrentUser } from "../../../../lib/auth.js";
 import { deleteCache, getCache, setCache } from "../../../../lib/cache.js";
-import Task, { TASK_STATUSES, TIME_HORIZONS } from "../../../../models/Task.js";
+import Category from "../../../../models/Category.js";
+import Task, { TASK_PRIORITIES, TASK_STATUSES, TIME_HORIZONS } from "../../../../models/Task.js";
+import TimeLog from "../../../../models/TimeLog.js";
 
 export const runtime = "nodejs";
 
@@ -26,6 +28,14 @@ function getTasksCacheKey(userId, timeHorizon) {
     : `${CACHE_NAMESPACE}:user:${userId}:all`;
 }
 
+function getFilteredTasksCacheKey(userId, searchParams) {
+  const parts = ["timeHorizon", "search", "status", "priority", "date_filter", "date"]
+    .map((key) => `${key}:${searchParams.get(key) || ""}`)
+    .join("|");
+
+  return `${CACHE_NAMESPACE}:user:${userId}:filters:${parts}`;
+}
+
 function normalizeInteger(value, fallback = undefined) {
   if (value === undefined || value === null || value === "") {
     return fallback;
@@ -40,12 +50,20 @@ function normalizeTaskPayload(body) {
     title: typeof body.title === "string" ? body.title.trim() : "",
     description: typeof body.description === "string" ? body.description.trim() : "",
     status: body.status ?? "pending",
+    priority: body.priority ?? "medium",
     timeHorizon: body.timeHorizon,
     timeAllocated: normalizeInteger(body.timeAllocated),
     timeSpent: normalizeInteger(body.timeSpent, 0),
     isAlarmSet: Boolean(body.isAlarmSet),
     alarmTime: body.alarmTime ? new Date(body.alarmTime) : null,
     pushToken: typeof body.pushToken === "string" ? body.pushToken.trim() : "",
+    categoryId: body.categoryId || body.category_id || null,
+    dueDate: body.dueDate || body.due_date ? new Date(body.dueDate || body.due_date) : null,
+    estimatedHours:
+      body.estimatedHours === "" || body.estimated_hours === ""
+        ? null
+        : body.estimatedHours ?? body.estimated_hours ?? null,
+    scheduleOrder: normalizeInteger(body.scheduleOrder ?? body.schedule_order, 0),
   };
 }
 
@@ -60,8 +78,12 @@ function validateTaskPayload(payload) {
     errors.push(`status must be one of: ${TASK_STATUSES.join(", ")}.`);
   }
 
-  if (!TIME_HORIZONS.includes(payload.timeHorizon)) {
+  if (payload.timeHorizon && !TIME_HORIZONS.includes(payload.timeHorizon)) {
     errors.push(`timeHorizon must be one of: ${TIME_HORIZONS.join(", ")}.`);
+  }
+
+  if (!TASK_PRIORITIES.includes(payload.priority)) {
+    errors.push(`priority must be one of: ${TASK_PRIORITIES.join(", ")}.`);
   }
 
   if (!Number.isInteger(payload.timeAllocated) || payload.timeAllocated < 1) {
@@ -78,6 +100,18 @@ function validateTaskPayload(payload) {
 
   if (payload.alarmTime && Number.isNaN(payload.alarmTime.getTime())) {
     errors.push("alarmTime must be a valid ISO date.");
+  }
+
+  if (payload.dueDate && Number.isNaN(payload.dueDate.getTime())) {
+    errors.push("dueDate must be a valid ISO date.");
+  }
+
+  if (
+    payload.estimatedHours !== null &&
+    payload.estimatedHours !== undefined &&
+    (Number.isNaN(Number(payload.estimatedHours)) || Number(payload.estimatedHours) < 0)
+  ) {
+    errors.push("estimatedHours must be a non-negative number.");
   }
 
   return errors;
@@ -107,6 +141,10 @@ function normalizeTaskUpdatePayload(body) {
     payload.status = body.status;
   }
 
+  if (body.priority !== undefined) {
+    payload.priority = body.priority;
+  }
+
   if (body.timeHorizon !== undefined) {
     payload.timeHorizon = body.timeHorizon;
   }
@@ -127,7 +165,49 @@ function normalizeTaskUpdatePayload(body) {
     payload.alarmTime = body.alarmTime ? new Date(body.alarmTime) : null;
   }
 
+  if (body.categoryId !== undefined || body.category_id !== undefined) {
+    payload.categoryId = body.categoryId || body.category_id || null;
+  }
+
+  if (body.dueDate !== undefined || body.due_date !== undefined) {
+    const dueDate = body.dueDate ?? body.due_date;
+    payload.dueDate = dueDate ? new Date(dueDate) : null;
+  }
+
+  if (body.estimatedHours !== undefined || body.estimated_hours !== undefined) {
+    const estimatedHours = body.estimatedHours ?? body.estimated_hours;
+    payload.estimatedHours = estimatedHours === "" || estimatedHours === null ? null : Number(estimatedHours);
+  }
+
+  if (body.scheduleOrder !== undefined || body.schedule_order !== undefined) {
+    payload.scheduleOrder = normalizeInteger(body.scheduleOrder ?? body.schedule_order, 0);
+  }
+
   return payload;
+}
+
+async function attachTaskDetails(tasks) {
+  const taskIds = tasks.map((task) => task._id);
+  const categoryIds = [...new Set(tasks.map((task) => String(task.categoryId || "")).filter(Boolean))];
+
+  const [categories, timeLogs] = await Promise.all([
+    Category.find({ _id: { $in: categoryIds } }).lean(),
+    TimeLog.find({ taskId: { $in: taskIds } }).lean(),
+  ]);
+
+  const categoriesById = new Map(categories.map((category) => [String(category._id), category]));
+  const logsByTask = new Map();
+
+  timeLogs.forEach((log) => {
+    const key = String(log.taskId);
+    logsByTask.set(key, [...(logsByTask.get(key) || []), log]);
+  });
+
+  return tasks.map((task) => ({
+    ...task,
+    category: task.categoryId ? categoriesById.get(String(task.categoryId)) || null : null,
+    timeLogs: logsByTask.get(String(task._id)) || [],
+  }));
 }
 
 async function setCachedTasks(cacheKey, tasks) {
@@ -165,6 +245,11 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const timeHorizon = searchParams.get("timeHorizon");
+    const search = searchParams.get("search");
+    const status = searchParams.get("status");
+    const priority = searchParams.get("priority");
+    const dateFilter = searchParams.get("date_filter");
+    const date = searchParams.get("date");
 
     if (timeHorizon && !TIME_HORIZONS.includes(timeHorizon)) {
       return jsonResponse(
@@ -176,7 +261,7 @@ export async function GET(request) {
       );
     }
 
-    const cacheKey = getTasksCacheKey(currentUser._id, timeHorizon);
+    const cacheKey = getFilteredTasksCacheKey(currentUser._id, searchParams);
     const cachedTasks = await getCachedTasks(cacheKey);
 
     if (cachedTasks) {
@@ -197,19 +282,43 @@ export async function GET(request) {
     const query = {
       userId: currentUser._id,
       ...(timeHorizon ? { timeHorizon } : {}),
+      ...(status && status !== "all" ? { status } : {}),
+      ...(priority && priority !== "all" ? { priority } : {}),
     };
+    if (search) {
+      query.title = { $regex: search, $options: "i" };
+    }
+    if (date) {
+      const start = new Date(`${date}T00:00:00.000`);
+      const end = new Date(`${date}T23:59:59.999`);
+      query.dueDate = { $gte: start, $lte: end };
+    } else if (dateFilter === "today") {
+      const now = new Date();
+      const yyyyMmDd = now.toISOString().slice(0, 10);
+      query.dueDate = { $gte: new Date(`${yyyyMmDd}T00:00:00.000`), $lte: new Date(`${yyyyMmDd}T23:59:59.999`) };
+    } else if (dateFilter === "week") {
+      const now = new Date();
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay() + 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      query.dueDate = { $gte: start, $lte: end };
+    }
     const tasks = await Task.find(query)
-      .sort({ updatedAt: -1 })
+      .sort({ dueDate: 1, priority: -1, scheduleOrder: 1, updatedAt: -1 })
       .lean();
+    const detailedTasks = await attachTaskDetails(tasks);
 
-    await setCachedTasks(cacheKey, tasks);
+    await setCachedTasks(cacheKey, detailedTasks);
 
     return jsonResponse(
       {
         success: true,
         source: "database",
-        count: tasks.length,
-        data: tasks,
+        count: detailedTasks.length,
+        data: detailedTasks,
       },
       200,
       { "X-Track-Time-Cache": "MISS" }
@@ -254,8 +363,16 @@ export async function POST(request) {
 
     await dbConnect();
 
+    if (payload.categoryId) {
+      const category = await Category.exists({ _id: payload.categoryId, userId: currentUser._id });
+      if (!category) {
+        return jsonResponse({ success: false, error: "Category not found." }, 404);
+      }
+    }
+
     const task = await Task.create({
       ...payload,
+      estimatedHours: payload.estimatedHours === null ? null : Number(payload.estimatedHours),
       userId: currentUser._id,
     });
     const serializedTask = task.toObject();
@@ -335,6 +452,10 @@ export async function PATCH(request) {
       validationErrors.push(`status must be one of: ${TASK_STATUSES.join(", ")}.`);
     }
 
+    if (payload.priority !== undefined && !TASK_PRIORITIES.includes(payload.priority)) {
+      validationErrors.push(`priority must be one of: ${TASK_PRIORITIES.join(", ")}.`);
+    }
+
     if (payload.timeHorizon !== undefined && !TIME_HORIZONS.includes(payload.timeHorizon)) {
       validationErrors.push(`timeHorizon must be one of: ${TIME_HORIZONS.join(", ")}.`);
     }
@@ -357,11 +478,26 @@ export async function PATCH(request) {
       validationErrors.push("alarmTime must be a valid ISO date.");
     }
 
+    if (payload.dueDate && Number.isNaN(payload.dueDate.getTime())) {
+      validationErrors.push("dueDate must be a valid ISO date.");
+    }
+
+    if (payload.estimatedHours !== undefined && payload.estimatedHours !== null && payload.estimatedHours < 0) {
+      validationErrors.push("estimatedHours must be a non-negative number.");
+    }
+
     if (validationErrors.length > 0) {
       return jsonResponse({ success: false, errors: validationErrors }, 400);
     }
 
     await dbConnect();
+
+    if (payload.categoryId) {
+      const category = await Category.exists({ _id: payload.categoryId, userId: currentUser._id });
+      if (!category) {
+        return jsonResponse({ success: false, error: "Category not found." }, 404);
+      }
+    }
 
     const existingTask = await Task.findOne({
       _id: taskId,

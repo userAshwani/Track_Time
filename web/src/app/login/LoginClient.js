@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { signInWithPopup } from "firebase/auth";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,6 +18,8 @@ import {
   ShieldCheck,
   Target,
 } from "lucide-react";
+
+import { firebaseAuth, googleProvider, initializeFirebaseAnalytics } from "../../../lib/firebaseClient";
 
 const LOGO_URL = "https://ashwanitiwari.com/logo.png";
 
@@ -223,9 +226,36 @@ export default function LoginClient() {
     }
   }
 
-  function handleGoogle() {
-    setMessage("Google sign-in is ready for Firebase credentials.");
+  async function handleGoogle() {
+    setIsSubmitting(true);
     setError("");
+    setMessage("");
+
+    try {
+      await initializeFirebaseAnalytics();
+      const credential = await signInWithPopup(firebaseAuth, googleProvider);
+      const idToken = await credential.user.getIdToken();
+      const response = await fetch("/api/auth/firebase-google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to sign in with Google.");
+      }
+
+      router.replace("/dashboard");
+    } catch (googleError) {
+      setError(
+        googleError.code === "auth/popup-closed-by-user"
+          ? "Google sign-in was closed before completion."
+          : googleError.message || "Unable to sign in with Google."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -388,10 +418,11 @@ export default function LoginClient() {
                 <button
                   type="button"
                   onClick={handleGoogle}
+                  disabled={isSubmitting}
                   className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                 >
                   <GoogleLogo />
-                  Continue with Google
+                  {isSubmitting ? "Connecting Google" : "Continue with Google"}
                 </button>
 
                 <button

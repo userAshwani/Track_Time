@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   Activity,
   CalendarDays,
+  FolderKanban,
   CheckCircle2,
   Clock3,
   LayoutDashboard,
@@ -15,7 +16,6 @@ import {
   PanelLeftOpen,
   Settings,
   ShieldCheck,
-  Target,
   X,
 } from "lucide-react";
 
@@ -34,21 +34,21 @@ function LogoMark({ className = "h-10 w-10" }) {
 
 const baseNavItems = [
   { href: "/dashboard", label: "Tasks", icon: LayoutDashboard, view: "overview" },
-  { href: "/dashboard?view=today", label: "Today", icon: Clock3, view: "today" },
-  { href: "/dashboard?view=week", label: "Week", icon: CalendarDays, view: "week" },
-  { href: "/dashboard?view=month", label: "Month", icon: Target, view: "month" },
-  { href: "/dashboard?view=year", label: "Year", icon: ShieldCheck, view: "year" },
-  { href: "/dashboard?view=completed", label: "Completed", icon: CheckCircle2, view: "completed" },
-  { href: "/dashboard?view=insights", label: "Insights", icon: Activity, view: "insights" },
+  { href: "/dashboard?view=tasks", label: "All Tasks", icon: CheckCircle2, view: "tasks" },
+  { href: "/dashboard?view=categories", label: "Categories", icon: FolderKanban, view: "categories" },
+  { href: "/dashboard?view=timer", label: "Time Tracker", icon: Clock3, view: "timer" },
+  { href: "/dashboard?view=daily", label: "Daily Schedule", icon: CalendarDays, view: "daily" },
+  { href: "/dashboard?view=summary", label: "Summary", icon: Activity, view: "summary" },
   { href: "/dashboard?view=profile", label: "Profile", icon: Settings, view: "profile" },
 ];
 
 const viewTitles = {
   overview: "Tasks",
-  today: "Today",
-  week: "Week",
-  month: "Month",
-  year: "Year",
+  tasks: "All Tasks",
+  categories: "Categories",
+  timer: "Time Tracker",
+  daily: "Daily Schedule",
+  summary: "Schedule Summary",
   completed: "Completed",
   insights: "Insights",
   health: "Insights",

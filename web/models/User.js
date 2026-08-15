@@ -69,6 +69,30 @@ const UserSchema = new Schema(
       trim: true,
       select: false,
     },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    profilePicture: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    timezone: {
+      type: String,
+      trim: true,
+      default: "UTC",
+    },
+    theme: {
+      type: String,
+      enum: ["light", "dark", "auto"],
+      default: "light",
+    },
   },
   {
     timestamps: true,

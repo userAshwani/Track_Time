@@ -97,6 +97,14 @@ SMTP_APP_PASSWORD=your_gmail_app_password
 EMAIL_FROM="Track Time <your_gmail_address>"
 AUTH_SECRET=use_a_long_random_secret_at_least_32_characters
 SUPERADMIN_EMAIL=your_superadmin_email
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+FIREBASE_WEB_API_KEY=your_firebase_web_api_key
 ```
 
 ### Mobile Environment
@@ -301,6 +309,14 @@ SMTP_APP_PASSWORD=your_gmail_app_password
 EMAIL_FROM="Track Time <your_gmail_address>"
 AUTH_SECRET=use_a_long_random_secret_at_least_32_characters
 SUPERADMIN_EMAIL=your_superadmin_email
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+FIREBASE_WEB_API_KEY=your_firebase_web_api_key
 ```
 
 7. Deploy.

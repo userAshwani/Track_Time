@@ -1,633 +1,445 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Activity,
-  AlarmClock,
   BarChart3,
   CheckCircle2,
   Clock3,
-  Info,
-  LayoutDashboard,
+  ListChecks,
   Plus,
   Save,
-  ShieldCheck,
-  Target,
+  Timer,
+  Trash2,
   UserRound,
 } from "lucide-react";
 
-import TaskCard from "../../components/TaskCard";
-
-const HORIZONS = [
-  { key: "1_Day", title: "Today", shortTitle: "Day", subtitle: "Immediate focus", view: "today" },
-  { key: "1_Week", title: "This Week", shortTitle: "Week", subtitle: "Weekly commitments", view: "week" },
-  { key: "1_Month", title: "This Month", shortTitle: "Month", subtitle: "Monthly targets", view: "month" },
-  { key: "1_Year", title: "This Year", shortTitle: "Year", subtitle: "Annual goals", view: "year" },
+const COLORS = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#84CC16", "#06B6D4", "#6B7280"];
+const PRIORITIES = ["low", "medium", "high"];
+const STATUSES = ["pending", "in_progress", "completed", "cancelled"];
+const QUOTES = [
+  "The secret of getting ahead is getting started.",
+  "Focus on being productive instead of busy.",
+  "Time is what we want most, but what we use worst.",
+  "The key is not to prioritize what's on your schedule, but to schedule your priorities.",
 ];
 
-const VIEW_TO_HORIZON = {
-  today: "1_Day",
-  week: "1_Week",
-  month: "1_Month",
-  year: "1_Year",
-};
-
-function getDisplayName(user) {
-  return user?.name || user?.email?.split("@")[0]?.replace(/[._-]+/g, " ") || "User";
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function formatHours(minutes) {
-  return `${Math.round(((Number(minutes) || 0) / 60) * 10) / 10}h`;
+function toLocalInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function formatDate(date) {
-  if (!date) {
-    return "Never";
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(date));
+function hours(minutes) {
+  return Math.round(((Number(minutes) || 0) / 60) * 10) / 10;
 }
 
-function calculateSummary(tasks) {
-  return tasks.reduce(
-    (summary, task) => {
-      const allocated = Number(task.timeAllocated) || 0;
-      const spent = Number(task.timeSpent) || 0;
-
-      return {
-        allocated: summary.allocated + allocated,
-        spent: summary.spent + spent,
-        completed: summary.completed + (task.status === "completed" ? 1 : 0),
-        active: summary.active + (task.status !== "completed" ? 1 : 0),
-        alarms: summary.alarms + (task.isAlarmSet ? 1 : 0),
-      };
-    },
-    { allocated: 0, spent: 0, completed: 0, active: 0, alarms: 0 }
-  );
+function formatDate(value) {
+  return value ? new Date(value).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "No date";
 }
 
-function percentage(part, total) {
-  if (!total) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((part / total) * 100));
-}
-
-function Hint({ text }) {
+function Field({ label, children }) {
   return (
-    <span className="group relative inline-flex">
-      <Info className="h-4 w-4 cursor-help text-slate-400" />
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-64 -translate-x-1/2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-medium leading-5 text-white opacity-0 shadow-xl transition duration-200 group-hover:opacity-100">
-        {text}
-      </span>
-    </span>
-  );
-}
-
-function FieldLabel({ children, hint }) {
-  return (
-    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+    <label className="block min-w-0">
+      <span className="mb-2 block text-sm font-semibold text-slate-700">{label}</span>
       {children}
-      {hint ? <Hint text={hint} /> : null}
-    </span>
+    </label>
   );
 }
 
-function MetricCard({ icon: Icon, label, value, helper }) {
+const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
+const primaryButton = "inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:bg-slate-300";
+const subtleButton = "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50";
+
+function Metric({ icon: Icon, label, value, helper, color = "text-indigo-700", bg = "bg-indigo-50" }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${bg} ${color}`}>
           <Icon className="h-5 w-5" />
         </div>
         <p className="text-2xl font-bold text-slate-950">{value}</p>
       </div>
       <p className="mt-3 text-sm font-semibold text-slate-700">{label}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
+      <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </div>
   );
 }
 
-function ProgressLine({ label, value, helper }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-slate-800">{label}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p>
-        </div>
-        <p className="text-lg font-bold text-slate-950">{value}%</p>
-      </div>
-      <div className="mt-3 h-2 rounded-full bg-slate-100">
-        <div
-          className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+function TaskForm({ categories, task, onSubmit, onCancel }) {
+  const [form, setForm] = useState({
+    title: task?.title || "",
+    description: task?.description || "",
+    categoryId: task?.categoryId || "",
+    priority: task?.priority || "medium",
+    status: task?.status || "pending",
+    dueDate: toLocalInput(task?.dueDate),
+    estimatedHours: task?.estimatedHours ?? "",
+  });
 
-function EmptyState({ title, description, icon: Icon = LayoutDashboard }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-        <Icon className="h-6 w-6" />
-      </div>
-      <h3 className="mt-4 text-lg font-bold text-slate-950">{title}</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-        {description}
-      </p>
-    </div>
-  );
-}
+  function update(key, value) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
 
-function TaskComposer({
-  form,
-  setForm,
-  onSubmit,
-  isCreating,
-  createError,
-  activeHorizon,
-}) {
   return (
     <form
-      id="create-task"
-      onSubmit={onSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit({
+          ...task,
+          ...form,
+          dueDate: form.dueDate || null,
+          estimatedHours: form.estimatedHours === "" ? null : Number(form.estimatedHours),
+          timeAllocated: Math.max(1, Math.round((Number(form.estimatedHours) || 1) * 60)),
+          timeHorizon: "1_Day",
+        });
+      }}
+      className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-bold text-emerald-700">
-            <Plus className="h-4 w-4" />
-            Create task
-          </p>
-          <h2 className="mt-1 text-xl font-bold text-slate-950">
-            One intake for every horizon
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            Add a task once, then choose whether it belongs to the day, week,
-            month, or year.
-          </p>
-        </div>
-        {activeHorizon ? (
-          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-            Filtering {activeHorizon.title}
-          </span>
-        ) : null}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Title">
+          <input className={inputClass} value={form.title} onChange={(event) => update("title", event.target.value)} required />
+        </Field>
+        <Field label="Category">
+          <select className={inputClass} value={form.categoryId} onChange={(event) => update("categoryId", event.target.value)}>
+            <option value="">No category</option>
+            {categories.map((category) => (
+              <option key={category._id} value={category._id}>{category.name}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Priority">
+          <select className={inputClass} value={form.priority} onChange={(event) => update("priority", event.target.value)}>
+            {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+          </select>
+        </Field>
+        <Field label="Status">
+          <select className={inputClass} value={form.status} onChange={(event) => update("status", event.target.value)}>
+            {STATUSES.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
+          </select>
+        </Field>
+        <Field label="Due date">
+          <input type="datetime-local" className={inputClass} value={form.dueDate} onChange={(event) => update("dueDate", event.target.value)} />
+        </Field>
+        <Field label="Estimated hours">
+          <input type="number" min="0" step="0.5" className={inputClass} value={form.estimatedHours} onChange={(event) => update("estimatedHours", event.target.value)} />
+        </Field>
       </div>
-
-      <div className="mt-5 grid min-w-0 gap-4">
-        <label className="min-w-0">
-          <FieldLabel hint="Use a short action title, not a long paragraph.">
-            Task title
-          </FieldLabel>
-          <input
-            value={form.title}
-            onChange={(event) => setForm({ ...form, title: event.target.value })}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-            placeholder="Example: Prepare weekly client update"
-            required
-          />
-        </label>
-
-        <label className="min-w-0">
-          <FieldLabel hint="Optional context that explains the expected result.">
-            Description
-          </FieldLabel>
-          <input
-            value={form.description}
-            onChange={(event) => setForm({ ...form, description: event.target.value })}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-            placeholder="Short note or outcome"
-          />
-        </label>
-
-        <div className="grid min-w-0 gap-4 md:grid-cols-3">
-          <label className="min-w-0">
-            <FieldLabel hint="All work is a task. The horizon decides its planning window.">
-              Horizon
-            </FieldLabel>
-            <select
-              value={form.timeHorizon}
-              onChange={(event) => setForm({ ...form, timeHorizon: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-            >
-              {HORIZONS.map((horizon) => (
-                <option key={horizon.key} value={horizon.key}>
-                  {horizon.title}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="min-w-0">
-            <FieldLabel hint="Planned effort in minutes. 60 means one hour.">
-              Planned minutes
-            </FieldLabel>
-            <input
-              type="number"
-              min="1"
-              value={form.timeAllocated}
-              onChange={(event) => setForm({ ...form, timeAllocated: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              placeholder="60"
-            />
-          </label>
-
-          <label className="min-w-0">
-            <FieldLabel hint="Optional reminder. Leave empty if this task does not need an alarm.">
-              Alarm time
-            </FieldLabel>
-            <input
-              type="datetime-local"
-              value={form.alarmTime}
-              onChange={(event) => setForm({ ...form, alarmTime: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-            />
-          </label>
-        </div>
+      <Field label="Description">
+        <textarea className={inputClass} rows={3} value={form.description} onChange={(event) => update("description", event.target.value)} />
+      </Field>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className={primaryButton} type="submit"><Save className="h-4 w-4" />Save Task</button>
+        {onCancel ? <button type="button" className={subtleButton} onClick={onCancel}>Cancel</button> : null}
       </div>
-
-      {createError ? (
-        <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          {createError}
-        </p>
-      ) : null}
-
-      <button
-        type="submit"
-        disabled={isCreating}
-        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition duration-200 hover:bg-emerald-700 disabled:bg-slate-300 sm:w-auto"
-      >
-        <Plus className="h-4 w-4" />
-        {isCreating ? "Creating" : "Create task"}
-      </button>
     </form>
   );
 }
 
-function HorizonSummary({ horizon, tasks }) {
-  const summary = calculateSummary(tasks);
-  const progress = percentage(summary.spent, summary.allocated);
+function TasksView({ tasks, categories, reload }) {
+  const [editing, setEditing] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [filters, setFilters] = useState({ search: "", status: "all", priority: "all", date_filter: "" });
 
-  return (
-    <Link
-      href={`/dashboard?view=${horizon.view}`}
-      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="font-bold text-slate-950">{horizon.title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{horizon.subtitle}</p>
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
-          {tasks.length}
-        </span>
-      </div>
-      <div className="mt-4 h-2 rounded-full bg-slate-100">
-        <div
-          className="h-2 rounded-full bg-emerald-500 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <p className="mt-2 text-xs font-medium text-slate-500">
-        {formatHours(summary.spent)} spent of {formatHours(summary.allocated)} planned
-      </p>
-    </Link>
-  );
-}
-
-function TaskList({ tasks, isLoading, error, title, emptyCopy, onPatch, onDelete, busyTaskId }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{tasks.length} task records</p>
-        </div>
-      </div>
-
-      <div className="mt-5">
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="h-52 animate-pulse rounded-2xl bg-slate-100" />
-            ))}
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        {!isLoading && !error && tasks.length === 0 ? (
-          <EmptyState
-            title="No tasks here yet"
-            description={emptyCopy}
-          />
-        ) : null}
-
-        {!isLoading && !error && tasks.length > 0 ? (
-          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {tasks.map((task) => (
-              <TaskCard
-                key={task._id}
-                task={task}
-                onPatch={onPatch}
-                onDelete={onDelete}
-                isBusy={busyTaskId === task._id}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function InsightsView({ allTasks, summary }) {
-  const completionRate = percentage(summary.completed, allTasks.length);
-  const alarmRate = percentage(summary.alarms, allTasks.length);
-  const utilizationRate = percentage(summary.spent, summary.allocated);
-  const activeRate = percentage(summary.active, allTasks.length);
-
-  if (allTasks.length === 0) {
-    return (
-      <EmptyState
-        icon={Activity}
-        title="Insights start after your first task"
-        description="Create tasks with planned time and horizons. Track Time will then calculate completion, alarm coverage, active workload, and time utilization from your real data."
-      />
-    );
+  async function saveTask(task) {
+    const isEdit = Boolean(task._id);
+    const response = await fetch("/api/tasks", {
+      method: isEdit ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(isEdit ? { id: task._id, ...task } : task),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || payload.errors?.join(" ") || "Unable to save task.");
+    setEditing(null);
+    setShowCreate(false);
+    await reload();
   }
 
-  return (
-    <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-bold text-emerald-700">Real workspace insights</p>
-        <h2 className="mt-2 text-2xl font-bold text-slate-950">
-          Based on your current tasks
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          This page does not use fake health scores. It reads task status,
-          planned time, tracked time, and alarms from your workspace.
-        </p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <MetricCard icon={CheckCircle2} label="Completed" value={summary.completed} helper="Closed tasks" />
-          <MetricCard icon={Clock3} label="Active" value={summary.active} helper="Open work" />
-          <MetricCard icon={AlarmClock} label="Alarms" value={summary.alarms} helper="Scheduled reminders" />
-          <MetricCard icon={BarChart3} label="Spent" value={formatHours(summary.spent)} helper="Tracked time" />
-        </div>
-      </div>
-      <div className="space-y-3">
-        <ProgressLine label="Completion rate" value={completionRate} helper="Completed tasks compared with total tasks." />
-        <ProgressLine label="Time utilization" value={utilizationRate} helper="Tracked time compared with planned time." />
-        <ProgressLine label="Alarm coverage" value={alarmRate} helper="Tasks with reminder time enabled." />
-        <ProgressLine label="Active workload" value={activeRate} helper="Open tasks that still need action." />
-      </div>
-    </section>
-  );
-}
+  async function deleteTask(task) {
+    await fetch(`/api/tasks?id=${task._id}`, { method: "DELETE" });
+    await reload();
+  }
 
-function CompletedView({ tasks, summary, onPatch, onDelete, busyTaskId }) {
-  return (
-    <section className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard icon={CheckCircle2} label="Completed tasks" value={tasks.length} helper="Finished across horizons" />
-        <MetricCard icon={Clock3} label="Completed time" value={formatHours(summary.spent)} helper="Tracked or planned closed work" />
-        <MetricCard icon={Target} label="Completion rate" value={`${percentage(tasks.length, tasks.length + summary.active)}%`} helper="Closed vs open workload" />
-      </div>
-      <TaskList
-        title="Completed work"
-        tasks={tasks}
-        isLoading={false}
-        emptyCopy="Tasks marked Done will appear here with their horizon and tracked time."
-        onPatch={onPatch}
-        onDelete={onDelete}
-        busyTaskId={busyTaskId}
-      />
-    </section>
-  );
-}
-
-function ProfileView({
-  profileForm,
-  setProfileForm,
-  onSubmit,
-  isSavingProfile,
-  profileMessage,
-  profileError,
-}) {
-  return (
-    <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-      <form
-        onSubmit={onSubmit}
-        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-            <UserRound className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-950">Profile settings</h2>
-            <p className="mt-1 text-sm text-slate-500">Update your account details.</p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4">
-          <label>
-            <FieldLabel hint="Shown in the dashboard header.">
-              Full name
-            </FieldLabel>
-            <input
-              value={profileForm.name}
-              onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              placeholder="Your name"
-            />
-          </label>
-          <label>
-            <FieldLabel hint="Used for OTP messages and login.">
-              Email address
-            </FieldLabel>
-            <input
-              type="email"
-              value={profileForm.email}
-              onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              required
-            />
-          </label>
-          <label>
-            <FieldLabel hint="Optional. Leave blank if you only want email OTP login.">
-              New password
-            </FieldLabel>
-            <input
-              type="password"
-              value={profileForm.password}
-              onChange={(event) => setProfileForm({ ...profileForm, password: event.target.value })}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-              placeholder="Minimum 8 characters"
-            />
-          </label>
-        </div>
-
-        {profileMessage ? (
-          <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-            {profileMessage}
-          </p>
-        ) : null}
-        {profileError ? (
-          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-            {profileError}
-          </p>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={isSavingProfile}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:bg-slate-300"
-        >
-          <Save className="h-4 w-4" />
-          {isSavingProfile ? "Saving" : "Save profile"}
-        </button>
-      </form>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white">
-          <ShieldCheck className="h-5 w-5" />
-        </div>
-        <h2 className="mt-4 text-xl font-bold text-slate-950">Access methods</h2>
-        <div className="mt-4 grid gap-3">
-          {[
-            ["Email OTP", "Passwordless login and automatic registration."],
-            ["Password login", "Available after setting a password or for the configured admin account."],
-            ["Google login", "Button is prepared for Firebase credentials."],
-          ].map(([title, copy]) => (
-            <div key={title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-bold text-slate-950">{title}</p>
-              <p className="mt-1 text-sm leading-6 text-slate-500">{copy}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AdminView({ user }) {
-  const [state, setState] = useState({
-    isLoading: user.role === "superadmin",
-    error: user.role === "superadmin" ? "" : "Superadmin access required.",
-    data: null,
+  const visibleTasks = tasks.filter((task) => {
+    const matchesSearch = !filters.search || task.title.toLowerCase().includes(filters.search.toLowerCase());
+    const matchesStatus = filters.status === "all" || task.status === filters.status;
+    const matchesPriority = filters.priority === "all" || task.priority === filters.priority;
+    const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+    const today = todayString();
+    const matchesDate =
+      !filters.date_filter ||
+      (filters.date_filter === "today" && dueDate?.toISOString().slice(0, 10) === today) ||
+      (filters.date_filter === "week" && dueDate && (dueDate - new Date()) / 86400000 <= 7);
+    return matchesSearch && matchesStatus && matchesPriority && matchesDate;
   });
 
-  useEffect(() => {
-    if (user.role !== "superadmin") {
-      return;
-    }
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[1fr_160px_160px_160px_auto]">
+          <input className={inputClass} placeholder="Search tasks by title..." value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+          <select className={inputClass} value={filters.date_filter} onChange={(event) => setFilters({ ...filters, date_filter: event.target.value })}>
+            <option value="">All tasks</option><option value="today">Today</option><option value="week">This week</option>
+          </select>
+          <select className={inputClass} value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })}>
+            <option value="all">All priorities</option>{PRIORITIES.map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <select className={inputClass} value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+            <option value="all">All status</option>{STATUSES.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}
+          </select>
+          <button className={primaryButton} onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create</button>
+        </div>
+      </div>
+      {showCreate ? <TaskForm categories={categories} onSubmit={saveTask} onCancel={() => setShowCreate(false)} /> : null}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {visibleTasks.map((task) => {
+          const logged = hours(task.timeLogs?.reduce((sum, log) => sum + log.durationMinutes, 0) || task.timeSpent);
+          const estimate = Number(task.estimatedHours) || hours(task.timeAllocated);
+          const progress = estimate > 0 ? Math.min(100, Math.round((logged / estimate) * 100)) : 0;
+          return (
+            <article key={task._id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              {editing?._id === task._id ? (
+                <TaskForm categories={categories} task={editing} onSubmit={saveTask} onCancel={() => setEditing(null)} />
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="min-w-0 text-lg font-bold text-slate-950">{task.title}</h3>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${task.priority === "high" ? "bg-red-100 text-red-700" : task.priority === "medium" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>{task.priority}</span>
+                  </div>
+                  {task.category ? <p className="mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold" style={{ backgroundColor: `${task.category.color}20`, color: task.category.color }}>{task.category.name}</p> : null}
+                  {task.description ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{task.description}</p> : null}
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                    <span className="rounded-lg bg-slate-50 p-2 font-semibold text-slate-600">{task.status.replace("_", " ")}</span>
+                    <span className="rounded-lg bg-slate-50 p-2 font-semibold text-slate-600">{formatDate(task.dueDate)}</span>
+                  </div>
+                  <div className="mt-4">
+                    <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{logged}h / {estimate}h</span><span>{progress}%</span></div>
+                    <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-600" style={{ width: `${progress}%` }} /></div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {task.status !== "completed" ? <button className={subtleButton} onClick={() => saveTask({ ...task, status: "completed" })}><CheckCircle2 className="h-4 w-4" />Complete</button> : null}
+                    <button className={subtleButton} onClick={() => setEditing(task)}>Edit</button>
+                    <button className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteTask(task)}><Trash2 className="h-4 w-4" />Delete</button>
+                  </div>
+                </>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        const response = await fetch("/api/superadmin/analytics", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const payload = await response.json();
+function CategoriesView({ categories, reload }) {
+  const [form, setForm] = useState({ name: "", color: COLORS[8], icon: "folder" });
+  const [editing, setEditing] = useState(null);
+  const activeForm = editing || form;
+  const setActiveForm = editing ? setEditing : setForm;
 
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.error || "Unable to load analytics.");
-        }
-
-        setState({ isLoading: false, error: "", data: payload.data });
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          setState({ isLoading: false, error: error.message, data: null });
-        }
-      }
-    }, 0);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [user.role]);
-
-  if (state.isLoading) {
-    return <EmptyState icon={ShieldCheck} title="Loading admin analytics" description="Fetching user, session, and task data." />;
+  async function saveCategory(event) {
+    event.preventDefault();
+    const response = await fetch("/api/categories", {
+      method: editing?._id ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editing?._id ? { id: editing._id, ...activeForm } : activeForm),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to save category.");
+    setForm({ name: "", color: COLORS[8], icon: "folder" });
+    setEditing(null);
+    await reload();
   }
 
-  if (state.error) {
-    return <EmptyState icon={ShieldCheck} title="Admin analytics unavailable" description={state.error} />;
+  async function deleteCategory(category) {
+    const response = await fetch(`/api/categories?id=${category._id}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) alert(payload.error || "Unable to delete category.");
+    await reload();
   }
-
-  const data = state.data;
 
   return (
     <section className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard icon={UserRound} label="Users" value={data.totalUsers} helper="All registered users" />
-        <MetricCard icon={ShieldCheck} label="Admins" value={data.totalSuperadmins} helper="Superadmin accounts" />
-        <MetricCard icon={LayoutDashboard} label="Tasks" value={data.totalTasks} helper="Platform-wide tasks" />
-        <MetricCard icon={Activity} label="Sessions" value={data.activeSessions} helper="Active sessions" />
-        <MetricCard icon={Clock3} label="7 day logins" value={data.loginsLast7Days} helper="Recent activity" />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">Horizon distribution</h2>
-          <div className="mt-4 space-y-3">
-            {data.tasksByHorizon.length === 0 ? (
-              <p className="text-sm text-slate-500">No tasks created yet.</p>
-            ) : null}
-            {data.tasksByHorizon.map((item) => (
-              <div key={item._id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-slate-950">{String(item._id).replace("1_", "1 ")}</p>
-                  <p className="text-sm font-bold text-emerald-700">{item.count} tasks</p>
+      <form onSubmit={saveCategory} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <Field label={editing ? "Edit category" : "Create category"}>
+            <input className={inputClass} value={activeForm.name} onChange={(event) => setActiveForm({ ...activeForm, name: event.target.value })} placeholder="Work, Personal, Study..." required />
+          </Field>
+          <button className={primaryButton}><Save className="h-4 w-4" />Save Category</button>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {COLORS.map((color) => (
+            <button key={color} type="button" aria-label={color} onClick={() => setActiveForm({ ...activeForm, color })} className={`h-9 w-9 rounded-lg border-4 ${activeForm.color === color ? "border-slate-950" : "border-white"}`} style={{ backgroundColor: color }} />
+          ))}
+        </div>
+      </form>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {categories.map((category) => {
+          const completion = category.tasksCount > 0 ? Math.round((category.completedTasks / category.tasksCount) * 100) : 0;
+          return (
+            <article key={category._id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm" style={{ borderTop: `4px solid ${category.color}` }}>
+              <div className="flex justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950">{category.name}</h3>
+                  <p className="text-sm text-slate-500">{category.tasksCount} tasks</p>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  {formatHours(item.timeSpent)} spent of {formatHours(item.timeAllocated)} planned
-                </p>
+                <span className="h-10 w-10 rounded-lg" style={{ backgroundColor: category.color }} />
               </div>
-            ))}
+              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
+                <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-indigo-700">{category.totalTimeHours}h</p><p className="text-xs text-slate-500">Time</p></div>
+                <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-green-700">{category.completedTasks}</p><p className="text-xs text-slate-500">Completed</p></div>
+              </div>
+              <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full" style={{ width: `${completion}%`, backgroundColor: category.color }} /></div>
+              <div className="mt-4 flex gap-2">
+                <button className={subtleButton} onClick={() => setEditing(category)}>Edit</button>
+                <button className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteCategory(category)}>Delete</button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TimerView({ timeData, reload }) {
+  const [form, setForm] = useState({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
+  const totalToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
+
+  async function saveLog(event) {
+    event.preventDefault();
+    const start = new Date(form.startTime);
+    const end = form.endTime ? new Date(form.endTime) : new Date();
+    const durationMinutes = Math.max(1, Math.floor((end - start) / 60000));
+    await fetch("/api/time-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, startTime: start, endTime: end, durationMinutes }),
+    });
+    setForm({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
+    await reload();
+  }
+
+  async function deleteLog(log) {
+    await fetch(`/api/time-logs?id=${log._id}`, { method: "DELETE" });
+    await reload();
+  }
+
+  return (
+    <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+      <form onSubmit={saveLog} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-xl font-bold text-slate-950">Manual Time Entry</h2>
+        <div className="mt-4 grid gap-4">
+          <Field label="Task">
+            <select className={inputClass} value={form.taskId} onChange={(event) => setForm({ ...form, taskId: event.target.value })} required>
+              <option value="">Choose a task</option>
+              {timeData.tasks?.map((task) => <option key={task._id} value={task._id}>{task.title}</option>)}
+            </select>
+          </Field>
+          <Field label="Start time"><input type="datetime-local" className={inputClass} value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} required /></Field>
+          <Field label="End time"><input type="datetime-local" className={inputClass} value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></Field>
+          <Field label="Notes"><textarea className={inputClass} rows={3} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
+        </div>
+        <button className={`${primaryButton} mt-4`}><Timer className="h-4 w-4" />Save Time Log</button>
+      </form>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-xl font-bold text-slate-950">Today&apos;s Time Logs</h2>
+        <p className="mt-1 text-sm font-semibold text-indigo-700">Total today: {totalToday}h</p>
+        <div className="mt-4 space-y-3">
+          {timeData.todayLogs?.map((log) => (
+            <div key={log._id} className="rounded-lg border border-slate-200 p-3">
+              <div className="flex justify-between gap-3">
+                <div><p className="font-bold text-slate-950">{log.task?.title || "Unknown task"}</p><p className="text-sm text-slate-500">{hours(log.durationMinutes)}h {log.notes ? `- ${log.notes}` : ""}</p></div>
+                <button className="text-red-600" onClick={() => deleteLog(log)}><Trash2 className="h-4 w-4" /></button>
+              </div>
+            </div>
+          ))}
+          {timeData.todayLogs?.length === 0 ? <p className="text-sm text-slate-500">No time logs for today yet.</p> : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DailyView({ scheduleData, reload }) {
+  const [date, setDate] = useState(scheduleData.date || todayString());
+  const [plannedHours, setPlannedHours] = useState(scheduleData.schedule?.plannedHours ?? 8);
+  const [taskId, setTaskId] = useState("");
+
+  async function loadDate(nextDate) {
+    setDate(nextDate);
+    await reload(nextDate);
+  }
+
+  async function postSchedule(body) {
+    await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload(date);
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Schedule date"><input type="date" className={inputClass} value={date} onChange={(event) => loadDate(event.target.value)} /></Field>
+          <Field label="Planned hours"><input type="number" min="0" max="24" step="0.5" className={inputClass} value={plannedHours} onChange={(event) => setPlannedHours(event.target.value)} /></Field>
+          <button className={primaryButton} onClick={() => postSchedule({ action: "planned-hours", date, plannedHours })}>Update</button>
+        </div>
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Metric icon={Clock3} label="Planned" value={`${scheduleData.schedule?.plannedHours ?? 0}h`} helper="Target hours" />
+            <Metric icon={CheckCircle2} label="Actual" value={`${scheduleData.schedule?.actualHours ?? 0}h`} helper="Logged hours" color="text-green-700" bg="bg-green-50" />
+            <Metric icon={BarChart3} label="Complete" value={`${scheduleData.schedule?.plannedHours ? Math.round((scheduleData.schedule.actualHours / scheduleData.schedule.plannedHours) * 100) : 0}%`} helper="Actual vs planned" color="text-amber-700" bg="bg-amber-50" />
+          </div>
+          <div className="mt-5 flex gap-2">
+            <select className={inputClass} value={taskId} onChange={(event) => setTaskId(event.target.value)}>
+              <option value="">Add task to schedule</option>
+              {scheduleData.allTasks?.map((task) => <option key={task._id} value={task._id}>{task.title}</option>)}
+            </select>
+            <button className={primaryButton} onClick={() => taskId && postSchedule({ action: "add-task", date, taskId })}><Plus className="h-4 w-4" />Add</button>
+          </div>
+          <div className="mt-5 space-y-3">
+            {scheduleData.tasks?.map((task) => <div key={task._id} className="rounded-lg border-l-4 bg-slate-50 p-3" style={{ borderLeftColor: task.category?.color || "#6B7280" }}><p className="font-bold">{task.title}</p><p className="text-sm text-slate-500">{task.priority} priority - {task.status.replace("_", " ")}</p></div>)}
+            {scheduleData.tasks?.length === 0 ? <p className="text-sm text-slate-500">No tasks scheduled for this day.</p> : null}
           </div>
         </div>
-
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-5">
-            <h2 className="text-lg font-bold text-slate-950">Recent users</h2>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Hourly Breakdown</h2>
+          <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto">
+            {scheduleData.hourlyBreakdown?.map((hour) => <div key={hour.hour} className="rounded-lg bg-slate-50 p-2"><p className="text-sm font-bold text-slate-700">{hour.hour}</p>{hour.logs.map((log) => <p key={log._id} className="text-xs text-slate-500">{log.task?.title} - {hours(log.durationMinutes)}h</p>)}{hour.isEmpty ? <p className="text-xs text-slate-400">No activity</p> : null}</div>)}
           </div>
-          <div className="overflow-x-auto">
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SummaryView({ summary }) {
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric icon={Clock3} label="Planned" value={`${summary.totalPlanned || 0}h`} helper="Last 30 days" />
+        <Metric icon={CheckCircle2} label="Actual" value={`${summary.totalActual || 0}h`} helper="Logged" color="text-green-700" bg="bg-green-50" />
+        <Metric icon={BarChart3} label="Completion" value={`${summary.completionRate || 0}%`} helper="Actual vs planned" color="text-amber-700" bg="bg-amber-50" />
+        <Metric icon={ListChecks} label="Tasks Done" value={summary.tasksCompleted || 0} helper="Completed" color="text-sky-700" bg="bg-sky-50" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold">Most Productive Days</h2>
+          <div className="mt-4 space-y-2">{summary.productiveDays?.map((day, index) => <div key={`${day.date}-${index}`} className="flex justify-between rounded-lg bg-slate-50 p-3"><span>{index + 1}. {day.date} ({day.dayOfWeek})</span><strong>{day.hours}h</strong></div>)}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold">Detailed Schedule History</h2>
+          <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Logins</th>
-                  <th className="px-4 py-3">Last Login</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {data.recentUsers.map((item) => (
-                  <tr key={String(item._id)}>
-                    <td className="px-4 py-3 font-semibold text-slate-950">{item.email}</td>
-                    <td className="px-4 py-3 text-slate-600">{item.role}</td>
-                    <td className="px-4 py-3 text-slate-600">{item.loginCount}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(item.lastLoginAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
+              <thead><tr className="text-slate-500"><th className="py-2">Date</th><th>Planned</th><th>Actual</th><th>Complete</th></tr></thead>
+              <tbody>{summary.dailyData?.map((row) => <tr key={row.date} className="border-t border-slate-100"><td className="py-2 font-semibold">{row.date}</td><td>{row.planned}h</td><td>{row.actual}h</td><td>{row.completion}%</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -636,328 +448,103 @@ function AdminView({ user }) {
   );
 }
 
-export default function DashboardClient({ user }) {
+function ProfileView({ user }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const activeView = searchParams.get("view") || "overview";
-  const normalizedView = activeView === "health" ? "insights" : activeView;
-  const activeHorizonKey = VIEW_TO_HORIZON[normalizedView];
-  const activeHorizon = HORIZONS.find((horizon) => horizon.key === activeHorizonKey);
-  const [tasksByHorizon, setTasksByHorizon] = useState(
-    Object.fromEntries(HORIZONS.map((horizon) => [horizon.key, []]))
-  );
-  const [errorsByHorizon, setErrorsByHorizon] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [busyTaskId, setBusyTaskId] = useState("");
-  const [createError, setCreateError] = useState("");
-  const [profileMessage, setProfileMessage] = useState("");
-  const [profileError, setProfileError] = useState("");
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    timeHorizon: activeHorizonKey || "1_Day",
-    timeAllocated: 60,
-    alarmTime: "",
-  });
-  const [profileForm, setProfileForm] = useState({
-    name: user.name || "",
-    email: user.email || "",
-    password: "",
-  });
+  const [form, setForm] = useState({ name: user.name || "", email: user.email || "", password: "" });
+  const [message, setMessage] = useState("");
 
-  async function loadTasks(signal) {
-    setIsLoading(true);
-    setErrorsByHorizon({});
-
-    const results = await Promise.all(
-      HORIZONS.map(async (horizon) => {
-        try {
-          const response = await fetch(`/api/tasks?timeHorizon=${horizon.key}`, {
-            cache: "no-store",
-            signal,
-          });
-          const payload = await response.json();
-
-          if (!response.ok || !payload.success) {
-            throw new Error(payload.error || "Unable to load tasks.");
-          }
-
-          return [horizon.key, payload.data ?? [], null];
-        } catch (error) {
-          if (error.name === "AbortError") {
-            return [horizon.key, [], null];
-          }
-
-          return [horizon.key, [], error.message];
-        }
-      })
-    );
-
-    if (signal?.aborted) {
-      return;
-    }
-
-    setTasksByHorizon(
-      Object.fromEntries(results.map(([key, tasks]) => [key, tasks]))
-    );
-    setErrorsByHorizon(
-      Object.fromEntries(
-        results
-          .filter(([, , error]) => Boolean(error))
-          .map(([key, , error]) => [key, error])
-      )
-    );
-    setIsLoading(false);
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      loadTasks(controller.signal);
-    }, 0);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, []);
-
-  async function handleCreateTask(event) {
+  async function saveProfile(event) {
     event.preventDefault();
-    setIsCreating(true);
-    setCreateError("");
-
-    try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          status: "pending",
-          timeAllocated: Number(form.timeAllocated),
-          timeSpent: 0,
-          isAlarmSet: Boolean(form.alarmTime),
-          alarmTime: form.alarmTime || null,
-        }),
-      });
-      const payload = await response.json();
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || payload.errors?.join(" ") || "Unable to create task.");
-      }
-
-      setForm((current) => ({
-        ...current,
-        title: "",
-        description: "",
-        alarmTime: "",
-      }));
-      await loadTasks();
-    } catch (error) {
-      setCreateError(error.message);
-    } finally {
-      setIsCreating(false);
-    }
-  }
-
-  async function handleTaskPatch(task, updates) {
-    setBusyTaskId(task._id);
-
-    try {
-      const response = await fetch("/api/tasks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: task._id, ...updates }),
-      });
-      const payload = await response.json();
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || payload.errors?.join(" ") || "Unable to update task.");
-      }
-
-      await loadTasks();
-    } catch (error) {
-      setCreateError(error.message);
-    } finally {
-      setBusyTaskId("");
-    }
-  }
-
-  async function handleTaskDelete(task) {
-    setBusyTaskId(task._id);
-
-    try {
-      const response = await fetch(`/api/tasks?id=${task._id}`, {
-        method: "DELETE",
-      });
-      const payload = await response.json();
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || "Unable to delete task.");
-      }
-
-      await loadTasks();
-    } catch (error) {
-      setCreateError(error.message);
-    } finally {
-      setBusyTaskId("");
-    }
-  }
-
-  async function handleProfileUpdate(event) {
-    event.preventDefault();
-    setIsSavingProfile(true);
-    setProfileError("");
-    setProfileMessage("");
-
-    try {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileForm),
-      });
-      const payload = await response.json();
-
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error || "Unable to update profile.");
-      }
-
-      setProfileForm((current) => ({
-        ...current,
-        name: payload.user.name || "",
-        email: payload.user.email || "",
-        password: "",
-      }));
-      setProfileMessage("Profile updated.");
+    const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    const payload = await response.json();
+    if (payload.success) {
+      setMessage("Profile updated.");
+      setForm((current) => ({ ...current, password: "" }));
       router.refresh();
-    } catch (error) {
-      setProfileError(error.message);
-    } finally {
-      setIsSavingProfile(false);
     }
-  }
-
-  const allTasks = useMemo(() => Object.values(tasksByHorizon).flat(), [tasksByHorizon]);
-  const portfolioSummary = calculateSummary(allTasks);
-  const completedTasks = allTasks.filter((task) => task.status === "completed");
-  const visibleTasks =
-    normalizedView === "completed"
-      ? completedTasks
-      : activeHorizonKey
-        ? tasksByHorizon[activeHorizonKey] ?? []
-        : allTasks;
-  const visibleError = activeHorizonKey ? errorsByHorizon[activeHorizonKey] : "";
-  const totalProgress = percentage(portfolioSummary.spent, portfolioSummary.allocated);
-
-  if (normalizedView === "profile") {
-    return (
-      <div className="mx-auto max-w-7xl">
-        <ProfileView
-          profileForm={profileForm}
-          setProfileForm={setProfileForm}
-          onSubmit={handleProfileUpdate}
-          isSavingProfile={isSavingProfile}
-          profileMessage={profileMessage}
-          profileError={profileError}
-        />
-      </div>
-    );
-  }
-
-  if (normalizedView === "insights") {
-    return (
-      <div className="mx-auto max-w-7xl">
-        <InsightsView allTasks={allTasks} summary={portfolioSummary} />
-      </div>
-    );
-  }
-
-  if (normalizedView === "admin") {
-    return (
-      <div className="mx-auto max-w-7xl">
-        <AdminView user={user} />
-      </div>
-    );
-  }
-
-  if (normalizedView === "completed") {
-    return (
-      <div className="mx-auto max-w-7xl space-y-5">
-        <CompletedView
-          tasks={completedTasks}
-          summary={portfolioSummary}
-          onPatch={handleTaskPatch}
-          onDelete={handleTaskDelete}
-          busyTaskId={busyTaskId}
-        />
-      </div>
-    );
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-emerald-700">
-              Hello {getDisplayName(user)}
-            </p>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-              Manage tasks by time horizon.
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Everything is a task. The horizon simply decides whether it belongs
-              to today, this week, this month, or this year.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[520px]">
-            <MetricCard icon={LayoutDashboard} label="Tasks" value={allTasks.length} helper="Total" />
-            <MetricCard icon={BarChart3} label="Progress" value={`${totalProgress}%`} helper="Time used" />
-            <MetricCard icon={Clock3} label="Spent" value={formatHours(portfolioSummary.spent)} helper="Tracked" />
-            <MetricCard icon={AlarmClock} label="Alarms" value={portfolioSummary.alarms} helper="Set" />
-          </div>
-        </div>
-      </section>
-
-      <TaskComposer
-        form={form}
-        setForm={setForm}
-        onSubmit={handleCreateTask}
-        isCreating={isCreating}
-        createError={createError}
-        activeHorizon={activeHorizon}
-      />
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {HORIZONS.map((horizon) => (
-          <HorizonSummary
-            key={horizon.key}
-            horizon={horizon}
-            tasks={tasksByHorizon[horizon.key] ?? []}
-          />
-        ))}
-      </section>
-
-      <TaskList
-        title={
-          activeHorizon
-            ? `${activeHorizon.title} tasks`
-            : "All active tasks"
-        }
-        tasks={visibleTasks}
-        isLoading={isLoading}
-        error={visibleError}
-        emptyCopy={
-          activeHorizon
-            ? `Create a task and select ${activeHorizon.title} as the horizon.`
-            : "Create your first task from the single intake form above."
-        }
-        onPatch={handleTaskPatch}
-        onDelete={handleTaskDelete}
-        busyTaskId={busyTaskId}
-      />
-    </div>
+    <form onSubmit={saveProfile} className="max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-indigo-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
+      <div className="mt-5 grid gap-4">
+        <Field label="Full name"><input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
+        <Field label="Email address"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></Field>
+        <Field label="New password"><input type="password" className={inputClass} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Minimum 8 characters" /></Field>
+      </div>
+      {message ? <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{message}</p> : null}
+      <button className={`${primaryButton} mt-5`}><Save className="h-4 w-4" />Save profile</button>
+    </form>
   );
+}
+
+function Overview({ user, tasks, timeData }) {
+  const today = todayString();
+  const totalTasksToday = tasks.filter((task) => task.dueDate?.slice(0, 10) === today).length;
+  const completedTasksToday = tasks.filter((task) => task.dueDate?.slice(0, 10) === today && task.status === "completed").length;
+  const pendingTasks = tasks.filter((task) => task.status === "pending").length;
+  const timeSpentToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
+  const productivityScore = Math.round((totalTasksToday ? (completedTasksToday / totalTasksToday) * 50 : 0) + Math.min(timeSpentToday * 5, 50));
+  const focus = Object.values(tasks.filter((task) => task.status === "pending" && task.category).reduce((acc, task) => {
+    acc[task.category._id] ||= { ...task.category, tasksCount: 0 };
+    acc[task.category._id].tasksCount += 1;
+    return acc;
+  }, {})).sort((a, b) => b.tasksCount - a.tasksCount)[0];
+
+  return (
+    <section className="space-y-5">
+      <div className="rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white shadow-sm">
+        <h2 className="text-3xl font-bold">Welcome back, {user.name || user.email}</h2>
+        <p className="mt-2 text-indigo-100">Here&apos;s what&apos;s happening with your time today.</p>
+      </div>
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-sm font-semibold text-indigo-800">{QUOTES[new Date().getDate() % QUOTES.length]}</div>
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric icon={BarChart3} label="Productivity Score" value={`${productivityScore}%`} helper="Today's performance" />
+        <Metric icon={CheckCircle2} label="Today's Tasks" value={`${completedTasksToday}/${totalTasksToday}`} helper="Completed today" color="text-green-700" bg="bg-green-50" />
+        <Metric icon={Clock3} label="Hours Today" value={`${timeSpentToday}h`} helper="Logged time" color="text-amber-700" bg="bg-amber-50" />
+        <Metric icon={ListChecks} label="Pending Tasks" value={pendingTasks} helper="Need attention" color="text-red-700" bg="bg-red-50" />
+      </div>
+      {focus ? <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Today&apos;s Focus</p><h3 className="mt-1 text-xl font-bold" style={{ color: focus.color }}>{focus.name}</h3><p className="mt-1 text-sm text-slate-500">{focus.tasksCount} pending tasks in this category</p></div> : null}
+    </section>
+  );
+}
+
+export default function DashboardClient({ user }) {
+  const searchParams = useSearchParams();
+  const activeView = searchParams.get("view") || "overview";
+  const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, loading: true, error: "" });
+
+  async function load(scheduleDate = todayString()) {
+    try {
+      const [tasksRes, categoriesRes, timeRes, scheduleRes, summaryRes] = await Promise.all([
+        fetch("/api/tasks", { cache: "no-store" }),
+        fetch("/api/categories", { cache: "no-store" }),
+        fetch("/api/time-logs", { cache: "no-store" }),
+        fetch(`/api/schedules?date=${scheduleDate}`, { cache: "no-store" }),
+        fetch("/api/schedules?mode=summary", { cache: "no-store" }),
+      ]);
+      const [tasks, categories, timeData, scheduleData, summary] = await Promise.all([tasksRes.json(), categoriesRes.json(), timeRes.json(), scheduleRes.json(), summaryRes.json()]);
+      setState({ tasks: tasks.data || [], categories: categories.data || [], timeData: timeData.data || {}, scheduleData: scheduleData.data || {}, summary: summary.data || {}, loading: false, error: "" });
+    } catch (error) {
+      setState((current) => ({ ...current, loading: false, error: error.message }));
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const content = useMemo(() => {
+    if (state.loading) return <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500">Loading workspace...</p>;
+    if (state.error) return <p className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">{state.error}</p>;
+    if (activeView === "tasks") return <TasksView tasks={state.tasks} categories={state.categories} reload={load} />;
+    if (activeView === "categories") return <CategoriesView categories={state.categories} reload={load} />;
+    if (activeView === "timer") return <TimerView timeData={state.timeData} reload={load} />;
+    if (activeView === "daily") return <DailyView scheduleData={state.scheduleData} reload={load} />;
+    if (activeView === "summary") return <SummaryView summary={state.summary} />;
+    if (activeView === "profile") return <ProfileView user={user} />;
+    return <Overview user={user} tasks={state.tasks} timeData={state.timeData} />;
+  }, [activeView, state, user]);
+
+  return <div className="mx-auto max-w-7xl">{content}</div>;
 }
