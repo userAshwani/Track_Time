@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
@@ -238,7 +238,7 @@ function TasksView({ tasks, categories, reload }) {
 }
 
 function CategoriesView({ categories, reload }) {
-  const [form, setForm] = useState({ name: "", color: COLORS[8], icon: "folder" });
+  const [form, setForm] = useState({ name: "", color: COLORS[3], icon: "folder" });
   const [editing, setEditing] = useState(null);
   const activeForm = editing || form;
   const setActiveForm = editing ? setEditing : setForm;
@@ -252,7 +252,7 @@ function CategoriesView({ categories, reload }) {
     });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || "Unable to save category.");
-    setForm({ name: "", color: COLORS[8], icon: "folder" });
+    setForm({ name: "", color: COLORS[3], icon: "folder" });
     setEditing(null);
     await reload();
   }
@@ -693,7 +693,7 @@ export default function DashboardClient({ user }) {
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
   const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, adminData: {}, loading: true, error: "" });
-  const [demoSeeded, setDemoSeeded] = useState(false);
+  const demoSeededRef = useRef(false);
 
   const load = useCallback(async (scheduleDate = todayString()) => {
     try {
@@ -718,11 +718,17 @@ export default function DashboardClient({ user }) {
 
       if (
         user.email === "codeashwani@gmail.com" &&
-        !demoSeeded &&
-        (tasks.data || []).length === 0
+        !demoSeededRef.current &&
+        ((tasks.data || []).length < 10 || (categories.data || []).length < 6)
       ) {
-        setDemoSeeded(true);
-        await fetch("/api/superadmin/seed-demo", { method: "POST" });
+        demoSeededRef.current = true;
+        const seedResponse = await fetch("/api/superadmin/seed-demo", { method: "POST" });
+        const seedPayload = await seedResponse.json();
+
+        if (!seedResponse.ok || !seedPayload.success) {
+          throw new Error(seedPayload.error || "Unable to seed demo CRM data.");
+        }
+
         await load(scheduleDate);
         return;
       }
@@ -731,7 +737,7 @@ export default function DashboardClient({ user }) {
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error.message }));
     }
-  }, [demoSeeded, user.email, user.role]);
+  }, [user.email, user.role]);
 
   useEffect(() => {
     load();
