@@ -17,6 +17,16 @@ export const metadata: Metadata = {
   description: "Enterprise time horizon task management platform",
   manifest: "/manifest.webmanifest",
   applicationName: "Track Time",
+  icons: {
+    icon: [
+      {
+        url: "/icon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
   appleWebApp: {
     capable: true,
     title: "Track Time",
