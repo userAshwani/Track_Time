@@ -251,6 +251,8 @@ export default function LoginClient() {
       setError(
         googleError.code === "auth/popup-closed-by-user"
           ? "Google sign-in was closed before completion."
+          : googleError.code === "auth/operation-not-allowed"
+            ? "Google sign-in is not enabled in Firebase Authentication."
           : googleError.message || "Unable to sign in with Google."
       );
     } finally {

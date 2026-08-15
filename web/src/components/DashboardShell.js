@@ -53,7 +53,7 @@ const viewTitles = {
   insights: "Insights",
   health: "Insights",
   profile: "Profile",
-  admin: "Superadmin",
+  admin: "Admin Analytics",
 };
 
 function SidebarContent({
@@ -174,7 +174,7 @@ export default function DashboardShell({ user, children }) {
           ...baseNavItems,
           {
             href: "/dashboard?view=admin",
-            label: "Superadmin",
+            label: "Admin Analytics",
             icon: ShieldCheck,
             view: "admin",
           },

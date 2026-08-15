@@ -75,3 +75,25 @@ export async function sendOtpEmail(email, otp) {
     `,
   });
 }
+
+export async function sendFeedbackEmail({ adminEmail, user, feedback }) {
+  if (!adminEmail) {
+    return;
+  }
+
+  const from = process.env.EMAIL_FROM || process.env.SMTP_USER;
+
+  await getTransporter().sendMail({
+    from,
+    to: adminEmail,
+    subject: `Track Time ${feedback.type}: ${user.email}`,
+    text: [
+      `User: ${user.name || user.email}`,
+      `Email: ${user.email}`,
+      `Type: ${feedback.type}`,
+      `Rating: ${feedback.rating || "Not provided"}`,
+      "",
+      feedback.message,
+    ].join("\n"),
+  });
+}

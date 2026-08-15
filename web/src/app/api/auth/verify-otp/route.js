@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "../../../../../lib/dbConnect.js";
 import {
   createSession,
+  getRoleForEmail,
   getClientIp,
   hashOtp,
   isValidEmail,
@@ -13,12 +14,6 @@ import OtpToken from "../../../../../models/OtpToken.js";
 import User from "../../../../../models/User.js";
 
 export const runtime = "nodejs";
-
-function getRoleForEmail(email) {
-  return email === normalizeEmail(process.env.SUPERADMIN_EMAIL)
-    ? "superadmin"
-    : "user";
-}
 
 export async function POST(request) {
   try {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   CheckCircle2,
   Clock3,
   ListChecks,
+  MessageSquare,
   Plus,
   Save,
   Timer,
@@ -505,6 +506,185 @@ function Overview({ user, tasks, timeData }) {
         <Metric icon={ListChecks} label="Pending Tasks" value={pendingTasks} helper="Need attention" color="text-red-700" bg="bg-red-50" />
       </div>
       {focus ? <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Today&apos;s Focus</p><h3 className="mt-1 text-xl font-bold" style={{ color: focus.color }}>{focus.name}</h3><p className="mt-1 text-sm text-slate-500">{focus.tasksCount} pending tasks in this category</p></div> : null}
+      <FeedbackBox />
+    </section>
+  );
+}
+
+function FeedbackBox() {
+  const [form, setForm] = useState({ type: "suggestion", rating: "", message: "" });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submitFeedback(event) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setMessage("");
+    setError("");
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error || "Unable to submit feedback.");
+      }
+
+      setForm({ type: "suggestion", rating: "", message: "" });
+      setMessage("Thanks. Your feedback was sent to the admin.");
+    } catch (feedbackError) {
+      setError(feedbackError.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submitFeedback} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+          <MessageSquare className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-slate-950">Suggestion or review</h2>
+          <p className="text-sm text-slate-500">Share what should improve in this CRM.</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-[180px_140px_1fr]">
+        <Field label="Type">
+          <select className={inputClass} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
+            <option value="suggestion">Suggestion</option>
+            <option value="review">Review</option>
+            <option value="bug">Bug</option>
+            <option value="other">Other</option>
+          </select>
+        </Field>
+        <Field label="Rating">
+          <select className={inputClass} value={form.rating} onChange={(event) => setForm({ ...form, rating: event.target.value })}>
+            <option value="">No rating</option>
+            {[1, 2, 3, 4, 5].map((rating) => <option key={rating} value={rating}>{rating}</option>)}
+          </select>
+        </Field>
+        <Field label="Message">
+          <textarea className={inputClass} rows={3} value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} placeholder="Write your suggestion or review..." required />
+        </Field>
+      </div>
+      {message ? <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{message}</p> : null}
+      {error ? <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p> : null}
+      <button className={`${primaryButton} mt-4`} disabled={isSubmitting}>
+        <MessageSquare className="h-4 w-4" />
+        {isSubmitting ? "Sending" : "Send feedback"}
+      </button>
+    </form>
+  );
+}
+
+function AdminView({ data, reload }) {
+  const [seedMessage, setSeedMessage] = useState("");
+  const [seedError, setSeedError] = useState("");
+
+  async function seedDemoUser() {
+    setSeedMessage("");
+    setSeedError("");
+    const response = await fetch("/api/superadmin/seed-demo", { method: "POST" });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.success) {
+      setSeedError(payload.error || "Unable to create demo data.");
+      return;
+    }
+
+    setSeedMessage(`${payload.message} Login: ${payload.login.email} / ${payload.login.password}`);
+    await reload();
+  }
+
+  const usageWindows = [
+    ["24h logins", data.loginsLast24Hours || 0],
+    ["7d logins", data.loginsLast7Days || 0],
+    ["30d logins", data.loginsLast30Days || 0],
+    ["Year logins", data.loginsThisYear || 0],
+  ];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-950">Admin Analytics</h2>
+          <p className="text-sm text-slate-500">Track user adoption, CRM usage, and feedback.</p>
+        </div>
+        <button className={primaryButton} onClick={seedDemoUser}>Create demo user data</button>
+      </div>
+      {seedMessage ? <p className="rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{seedMessage}</p> : null}
+      {seedError ? <p className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{seedError}</p> : null}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric icon={UserRound} label="Users" value={data.totalUsers || 0} helper={`${data.totalRegularUsers || 0} regular users`} />
+        <Metric icon={ListChecks} label="Tasks" value={data.totalTasks || 0} helper="All user tasks" color="text-green-700" bg="bg-green-50" />
+        <Metric icon={Clock3} label="Time Logs" value={data.totalTimeLogs || 0} helper="All tracking entries" color="text-amber-700" bg="bg-amber-50" />
+        <Metric icon={MessageSquare} label="Feedback" value={data.totalFeedback || 0} helper={`${data.openFeedback || 0} new`} color="text-sky-700" bg="bg-sky-50" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-4">
+        {usageWindows.map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-sm font-semibold text-slate-500">{label}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-950">Users and usage</h3>
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-slate-500"><tr><th className="py-2">User</th><th>Logins</th><th>Tasks</th><th>Done</th><th>Hours</th><th>Last Login</th></tr></thead>
+              <tbody>
+                {data.usageByUser?.map((item) => (
+                  <tr key={item._id} className="border-t border-slate-100">
+                    <td className="py-2"><strong>{item.name || item.email}</strong><p className="text-xs text-slate-500">{item.email}</p></td>
+                    <td>{item.loginCount || 0}</td>
+                    <td>{item.tasksCount || 0}</td>
+                    <td>{item.completedTasks || 0}</td>
+                    <td>{hours(item.loggedMinutes)}h</td>
+                    <td>{item.lastLoginAt ? formatDate(item.lastLoginAt) : "Never"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-950">Recent feedback</h3>
+          <div className="mt-4 space-y-3">
+            {data.recentFeedback?.map((item) => (
+              <div key={item._id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex justify-between gap-3">
+                  <p className="text-sm font-bold text-slate-950">{item.userId?.email || "Unknown user"}</p>
+                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">{item.type}</span>
+                </div>
+                <p className="mt-2 text-sm text-slate-600">{item.message}</p>
+                <p className="mt-2 text-xs text-slate-400">{item.rating ? `${item.rating}/5 - ` : ""}{formatDate(item.createdAt)}</p>
+              </div>
+            ))}
+            {data.recentFeedback?.length === 0 ? <p className="text-sm text-slate-500">No feedback yet.</p> : null}
+          </div>
+        </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-950">Daily CRM usage, last 30 days</h3>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {data.dailyUsage?.map((day) => (
+            <div key={day._id} className="rounded-lg bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-500">{day._id}</p>
+              <p className="mt-1 text-sm font-bold text-slate-950">{hours(day.loggedMinutes)}h</p>
+              <p className="text-xs text-slate-500">{day.logs} logs</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -512,27 +692,37 @@ function Overview({ user, tasks, timeData }) {
 export default function DashboardClient({ user }) {
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
-  const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, loading: true, error: "" });
+  const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, adminData: {}, loading: true, error: "" });
 
-  async function load(scheduleDate = todayString()) {
+  const load = useCallback(async (scheduleDate = todayString()) => {
     try {
-      const [tasksRes, categoriesRes, timeRes, scheduleRes, summaryRes] = await Promise.all([
+      const [tasksRes, categoriesRes, timeRes, scheduleRes, summaryRes, adminRes] = await Promise.all([
         fetch("/api/tasks", { cache: "no-store" }),
         fetch("/api/categories", { cache: "no-store" }),
         fetch("/api/time-logs", { cache: "no-store" }),
         fetch(`/api/schedules?date=${scheduleDate}`, { cache: "no-store" }),
         fetch("/api/schedules?mode=summary", { cache: "no-store" }),
+        user.role === "superadmin"
+          ? fetch("/api/superadmin/analytics", { cache: "no-store" })
+          : Promise.resolve(null),
       ]);
-      const [tasks, categories, timeData, scheduleData, summary] = await Promise.all([tasksRes.json(), categoriesRes.json(), timeRes.json(), scheduleRes.json(), summaryRes.json()]);
-      setState({ tasks: tasks.data || [], categories: categories.data || [], timeData: timeData.data || {}, scheduleData: scheduleData.data || {}, summary: summary.data || {}, loading: false, error: "" });
+      const [tasks, categories, timeData, scheduleData, summary, admin] = await Promise.all([
+        tasksRes.json(),
+        categoriesRes.json(),
+        timeRes.json(),
+        scheduleRes.json(),
+        summaryRes.json(),
+        adminRes ? adminRes.json() : Promise.resolve({ data: {} }),
+      ]);
+      setState({ tasks: tasks.data || [], categories: categories.data || [], timeData: timeData.data || {}, scheduleData: scheduleData.data || {}, summary: summary.data || {}, adminData: admin.data || {}, loading: false, error: "" });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error.message }));
     }
-  }
+  }, [user.role]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const content = useMemo(() => {
     if (state.loading) return <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500">Loading workspace...</p>;
@@ -543,8 +733,9 @@ export default function DashboardClient({ user }) {
     if (activeView === "daily") return <DailyView scheduleData={state.scheduleData} reload={load} />;
     if (activeView === "summary") return <SummaryView summary={state.summary} />;
     if (activeView === "profile") return <ProfileView user={user} />;
+    if (activeView === "admin") return <AdminView data={state.adminData} reload={load} />;
     return <Overview user={user} tasks={state.tasks} timeData={state.timeData} />;
-  }, [activeView, state, user]);
+  }, [activeView, state, user, load]);
 
   return <div className="mx-auto max-w-7xl">{content}</div>;
 }

@@ -58,6 +58,7 @@ Also add the auth and Firebase variables used by the production login flow:
 ```env
 AUTH_SECRET=use_a_long_random_secret_at_least_32_characters
 SUPERADMIN_EMAIL=your_superadmin_email
+ADMIN_FEEDBACK_EMAIL=dev.ashwanitiwari@gmail.com
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true

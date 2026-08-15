@@ -8,6 +8,10 @@ import User from "../models/User.js";
 
 export const SESSION_COOKIE_NAME = "track_time_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+export const ADMIN_EMAILS = [
+  "dev.ashwanitiwari@gmail.com",
+  process.env.SUPERADMIN_EMAIL,
+].filter(Boolean).map((email) => normalizeEmail(email));
 
 export function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -15,6 +19,10 @@ export function normalizeEmail(email) {
 
 export function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+}
+
+export function getRoleForEmail(email) {
+  return ADMIN_EMAILS.includes(normalizeEmail(email)) ? "superadmin" : "user";
 }
 
 function getAuthSecret() {
@@ -147,7 +155,7 @@ export async function getCurrentUser() {
     _id: String(user._id),
     name: user.name || "",
     email: user.email,
-    role: user.role,
+    role: getRoleForEmail(user.email) === "superadmin" ? "superadmin" : user.role,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };

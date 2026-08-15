@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "../../../../../lib/dbConnect.js";
 import {
   createSession,
+  getRoleForEmail,
   getClientIp,
   normalizeEmail,
   setSessionCookie,
@@ -10,12 +11,6 @@ import {
 import User from "../../../../../models/User.js";
 
 export const runtime = "nodejs";
-
-function getRoleForEmail(email) {
-  return email === normalizeEmail(process.env.SUPERADMIN_EMAIL)
-    ? "superadmin"
-    : "user";
-}
 
 async function verifyFirebaseIdToken(idToken) {
   const apiKey =

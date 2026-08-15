@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "../../../../../lib/dbConnect.js";
 import {
   createSession,
+  getRoleForEmail,
   getClientIp,
   hashPassword,
   isValidEmail,
@@ -99,6 +100,7 @@ export async function POST(request) {
       user.lastLoginAt = loginAt;
       user.lastIp = lastIp;
       user.lastUserAgent = userAgent;
+      user.role = getRoleForEmail(email);
       await user.save();
     }
 

@@ -46,6 +46,13 @@ export async function POST(request) {
   } catch (error) {
     console.error("POST /api/auth/request-otp failed.", error);
 
+    if (error.message === "SMTP email configuration is missing.") {
+      return NextResponse.json(
+        { success: false, error: "Email login is not configured on this server. Add SMTP variables in Vercel." },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       { success: false, error: "Unable to send OTP right now." },
       { status: 500 }
