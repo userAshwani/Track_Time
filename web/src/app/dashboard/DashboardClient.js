@@ -15,7 +15,7 @@ import {
   UserRound,
 } from "lucide-react";
 
-const COLORS = ["#EF4444", "#F59E0B", "#10B981", "#3B82F6", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316", "#6366F1", "#84CC16", "#06B6D4", "#6B7280"];
+const COLORS = ["#EF4444", "#F59E0B", "#10B981", "#059669", "#047857", "#0D9488", "#14B8A6", "#16A34A", "#22C55E", "#84CC16", "#06B6D4", "#6B7280"];
 const PRIORITIES = ["low", "medium", "high"];
 const STATUSES = ["pending", "in_progress", "completed", "cancelled"];
 const QUOTES = [
@@ -53,11 +53,11 @@ function Field({ label, children }) {
   );
 }
 
-const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
-const primaryButton = "inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:bg-slate-300";
+const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
+const primaryButton = "inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:bg-slate-300";
 const subtleButton = "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50";
 
-function Metric({ icon: Icon, label, value, helper, color = "text-indigo-700", bg = "bg-indigo-50" }) {
+function Metric({ icon: Icon, label, value, helper, color = "text-emerald-700", bg = "bg-emerald-50" }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
@@ -220,7 +220,7 @@ function TasksView({ tasks, categories, reload }) {
                   </div>
                   <div className="mt-4">
                     <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{logged}h / {estimate}h</span><span>{progress}%</span></div>
-                    <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-600" style={{ width: `${progress}%` }} /></div>
+                    <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {task.status !== "completed" ? <button className={subtleButton} onClick={() => saveTask({ ...task, status: "completed" })}><CheckCircle2 className="h-4 w-4" />Complete</button> : null}
@@ -292,7 +292,7 @@ function CategoriesView({ categories, reload }) {
                 <span className="h-10 w-10 rounded-lg" style={{ backgroundColor: category.color }} />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-                <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-indigo-700">{category.totalTimeHours}h</p><p className="text-xs text-slate-500">Time</p></div>
+                <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-emerald-700">{category.totalTimeHours}h</p><p className="text-xs text-slate-500">Time</p></div>
                 <div className="rounded-lg bg-slate-50 p-3"><p className="font-bold text-green-700">{category.completedTasks}</p><p className="text-xs text-slate-500">Completed</p></div>
               </div>
               <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full" style={{ width: `${completion}%`, backgroundColor: category.color }} /></div>
@@ -350,7 +350,7 @@ function TimerView({ timeData, reload }) {
       </form>
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-bold text-slate-950">Today&apos;s Time Logs</h2>
-        <p className="mt-1 text-sm font-semibold text-indigo-700">Total today: {totalToday}h</p>
+        <p className="mt-1 text-sm font-semibold text-emerald-700">Total today: {totalToday}h</p>
         <div className="mt-4 space-y-3">
           {timeData.todayLogs?.map((log) => (
             <div key={log._id} className="rounded-lg border border-slate-200 p-3">
@@ -467,7 +467,7 @@ function ProfileView({ user }) {
 
   return (
     <form onSubmit={saveProfile} className="max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-indigo-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
+      <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
       <div className="mt-5 grid gap-4">
         <Field label="Full name"><input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
         <Field label="Email address"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></Field>
@@ -494,11 +494,11 @@ function Overview({ user, tasks, timeData }) {
 
   return (
     <section className="space-y-5">
-      <div className="rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white shadow-sm">
+      <div className="rounded-lg bg-gradient-to-r from-emerald-700 to-green-500 p-6 text-white shadow-sm">
         <h2 className="text-3xl font-bold">Welcome back, {user.name || user.email}</h2>
-        <p className="mt-2 text-indigo-100">Here&apos;s what&apos;s happening with your time today.</p>
+        <p className="mt-2 text-emerald-50">Here&apos;s what&apos;s happening with your time today.</p>
       </div>
-      <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-sm font-semibold text-indigo-800">{QUOTES[new Date().getDate() % QUOTES.length]}</div>
+      <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{QUOTES[new Date().getDate() % QUOTES.length]}</div>
       <div className="grid gap-4 md:grid-cols-4">
         <Metric icon={BarChart3} label="Productivity Score" value={`${productivityScore}%`} helper="Today's performance" />
         <Metric icon={CheckCircle2} label="Today's Tasks" value={`${completedTasksToday}/${totalTasksToday}`} helper="Completed today" color="text-green-700" bg="bg-green-50" />
@@ -547,7 +547,7 @@ function FeedbackBox() {
   return (
     <form onSubmit={submitFeedback} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
           <MessageSquare className="h-5 w-5" />
         </div>
         <div>
@@ -663,7 +663,7 @@ function AdminView({ data, reload }) {
               <div key={item._id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex justify-between gap-3">
                   <p className="text-sm font-bold text-slate-950">{item.userId?.email || "Unknown user"}</p>
-                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">{item.type}</span>
+                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{item.type}</span>
                 </div>
                 <p className="mt-2 text-sm text-slate-600">{item.message}</p>
                 <p className="mt-2 text-xs text-slate-400">{item.rating ? `${item.rating}/5 - ` : ""}{formatDate(item.createdAt)}</p>
@@ -693,6 +693,7 @@ export default function DashboardClient({ user }) {
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
   const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, adminData: {}, loading: true, error: "" });
+  const [demoSeeded, setDemoSeeded] = useState(false);
 
   const load = useCallback(async (scheduleDate = todayString()) => {
     try {
@@ -714,11 +715,23 @@ export default function DashboardClient({ user }) {
         summaryRes.json(),
         adminRes ? adminRes.json() : Promise.resolve({ data: {} }),
       ]);
+
+      if (
+        user.email === "codeashwani@gmail.com" &&
+        !demoSeeded &&
+        (tasks.data || []).length === 0
+      ) {
+        setDemoSeeded(true);
+        await fetch("/api/superadmin/seed-demo", { method: "POST" });
+        await load(scheduleDate);
+        return;
+      }
+
       setState({ tasks: tasks.data || [], categories: categories.data || [], timeData: timeData.data || {}, scheduleData: scheduleData.data || {}, summary: summary.data || {}, adminData: admin.data || {}, loading: false, error: "" });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: error.message }));
     }
-  }, [user.role]);
+  }, [demoSeeded, user.email, user.role]);
 
   useEffect(() => {
     load();
