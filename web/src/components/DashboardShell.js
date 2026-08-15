@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import InstallAppButton from "./InstallAppButton";
 
 const LOGO_URL = "https://ashwanitiwari.com/logo.png";
 
@@ -230,7 +231,7 @@ export default function DashboardShell({ user, children }) {
 
       <div className="flex h-screen min-w-0 flex-col bg-slate-50">
         <header className="shrink-0 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto] items-center gap-3 xl:grid-cols-[1fr_auto_1fr]">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -262,9 +263,11 @@ export default function DashboardShell({ user, children }) {
               </div>
             </div>
 
+            <InstallAppButton className="hidden xl:block" />
+
             <Link
               href="/dashboard?view=profile"
-              className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:bg-slate-50"
+              className="flex min-w-0 items-center gap-2 justify-self-end rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:bg-slate-50"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-bold text-white">
                 {(user.name || user.email).slice(0, 2).toUpperCase()}
@@ -273,6 +276,9 @@ export default function DashboardShell({ user, children }) {
                 {user.name || user.email}
               </span>
             </Link>
+          </div>
+          <div className="mx-auto mt-3 max-w-7xl xl:hidden">
+            <InstallAppButton />
           </div>
         </header>
 

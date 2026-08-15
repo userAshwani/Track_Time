@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Target,
 } from "lucide-react";
+import InstallAppButton from "../components/InstallAppButton";
 
 const LOGO_URL = "https://ashwanitiwari.com/logo.png";
 
@@ -110,7 +111,11 @@ export default function LandingPage() {
             >
               See workflow
             </a>
+            <InstallAppButton />
           </div>
+          <p className="mt-5 max-w-xl rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-800">
+            Track Time CRM will keep updating continuously with better features, smoother workflows, and free services for users.
+          </p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70">
@@ -160,6 +165,20 @@ export default function LandingPage() {
               <h3 className="mt-4 font-bold text-slate-950">One task model</h3>
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Day, week, month, and year are filters over the same task system.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <Clock3 className="h-5 w-5 text-emerald-700" />
+              <h3 className="mt-4 font-bold text-slate-950">Start and stop timer</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Select a task, start tracking, stop when finished, and the CRM stores your actual work time.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <Layers3 className="h-5 w-5 text-emerald-700" />
+              <h3 className="mt-4 font-bold text-slate-950">Installable mobile CRM</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Install Track Time as a web app on Android, desktop Chrome, or Edge and use it like a focused CRM.
               </p>
             </div>
           </div>
