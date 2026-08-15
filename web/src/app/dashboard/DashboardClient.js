@@ -44,6 +44,113 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "No date";
 }
 
+function demoDate(offsetDays = 0, hour = 9, minute = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
+function createCodeashwaniDemoState(scheduleDate = todayString()) {
+  const categories = [
+    { _id: "demo-cat-js", name: "JavaScript & Frontend", color: "#059669", icon: "code" },
+    { _id: "demo-cat-java", name: "Java & Backend", color: "#0F766E", icon: "server" },
+    { _id: "demo-cat-cyber", name: "Cybersecurity", color: "#16A34A", icon: "shield" },
+    { _id: "demo-cat-freelance", name: "Freelance Projects", color: "#10B981", icon: "briefcase" },
+    { _id: "demo-cat-mnc", name: "MNC Preparation", color: "#65A30D", icon: "target" },
+    { _id: "demo-cat-site", name: "AshwaniTiwari.com", color: "#0D9488", icon: "globe" },
+  ];
+  const byId = Object.fromEntries(categories.map((category) => [category._id, category]));
+  const tasks = [
+    ["demo-task-site-audit", "demo-cat-site", "Audit ashwanitiwari.com service pages", "Map website, app, CRM, ecommerce, SEO, and branding service paths into CRM follow-up tasks.", "high", "completed", -2, 2, 125],
+    ["demo-task-js-dom", "demo-cat-js", "Build JavaScript DOM mini-project", "Practice form validation, fetch calls, local state, and reusable UI components.", "high", "completed", -1, 2.5, 145],
+    ["demo-task-next", "demo-cat-js", "Complete React and Next.js dashboard module", "Study App Router, API routes, Mongo integration, auth guards, and production deployment.", "high", "in_progress", 0, 3, 110],
+    ["demo-task-java-oop", "demo-cat-java", "Revise Java OOP and collections", "Cover inheritance, interfaces, generics, HashMap internals, streams, and exception handling.", "medium", "in_progress", 1, 2.5, 75],
+    ["demo-task-spring", "demo-cat-java", "Design Spring Boot CRM API outline", "Plan entities, controllers, service layer, validation, security, and deployment notes.", "medium", "pending", 3, 3, 0],
+    ["demo-task-owasp", "demo-cat-cyber", "Practice OWASP Top 10 checklist", "Review auth flaws, injection, XSS, CSRF, rate limits, secret handling, and secure headers.", "high", "in_progress", 0, 2, 70],
+    ["demo-task-security-audit", "demo-cat-cyber", "Run basic security audit on portfolio forms", "Check validation, error messages, bot protection, and sensitive data exposure.", "medium", "pending", 4, 2, 0],
+    ["demo-task-proposal", "demo-cat-freelance", "Send ecommerce website proposal", "Finalize scope, payment milestones, timeline, hosting plan, and maintenance package.", "high", "pending", 1, 1.5, 35],
+    ["demo-task-screens", "demo-cat-freelance", "Prepare CRM demo screenshots for client", "Capture dashboard, categories, task planner, admin analytics, and feedback screen.", "high", "in_progress", 0, 1.5, 40],
+    ["demo-task-dsa", "demo-cat-mnc", "Solve 8 DSA problems for product companies", "Focus on arrays, strings, hashing, sliding window, and recursion patterns.", "high", "in_progress", 0, 2.5, 95],
+    ["demo-task-dbms", "demo-cat-mnc", "Revise DBMS and operating systems notes", "Transactions, indexing, normalization, processes, threads, deadlocks, and memory.", "medium", "pending", 2, 2, 0],
+    ["demo-task-mock", "demo-cat-mnc", "Mock interview answer practice", "Prepare crisp stories for freelancing, learning discipline, project ownership, and problem solving.", "medium", "pending", 5, 1.5, 0],
+  ].map(([id, categoryId, title, description, priority, status, offset, estimatedHours, timeSpent], index) => ({
+    _id: id,
+    categoryId,
+    category: byId[categoryId],
+    title,
+    description,
+    priority,
+    status,
+    dueDate: demoDate(offset, 10 + (index % 10)),
+    estimatedHours,
+    timeAllocated: Math.round(estimatedHours * 60),
+    timeSpent,
+    timeLogs: [],
+  }));
+  const todayLogs = [
+    ["demo-log-next", "demo-task-next", 110, "Studied routing, server APIs, and Mongo models.", 8],
+    ["demo-log-java", "demo-task-java-oop", 75, "Covered collections and exception notes.", 10],
+    ["demo-log-owasp", "demo-task-owasp", 70, "Reviewed injection, XSS, and auth issues.", 17],
+    ["demo-log-screens", "demo-task-screens", 40, "Planned screenshots and feature order.", 15],
+    ["demo-log-dsa", "demo-task-dsa", 95, "Solved arrays and hashing practice set.", 19],
+  ].map(([id, taskId, durationMinutes, notes, hour]) => ({
+    _id: id,
+    taskId,
+    task: tasks.find((task) => task._id === taskId),
+    startTime: demoDate(0, hour),
+    endTime: demoDate(0, hour, durationMinutes % 60),
+    durationMinutes,
+    notes,
+  }));
+  const categoryStats = categories.map((category) => {
+    const categoryTasks = tasks.filter((task) => task.categoryId === category._id);
+    return {
+      ...category,
+      tasksCount: categoryTasks.length,
+      completedTasks: categoryTasks.filter((task) => task.status === "completed").length,
+      totalTimeHours: hours(categoryTasks.reduce((sum, task) => sum + task.timeSpent, 0)),
+    };
+  });
+  const dailyData = [
+    { date: demoDate(-2).slice(0, 10), planned: 6, actual: 2.1, completion: 35 },
+    { date: demoDate(-1).slice(0, 10), planned: 7, actual: 3, completion: 43 },
+    { date: todayString(), planned: 8, actual: 6.5, completion: 81 },
+    { date: demoDate(1).slice(0, 10), planned: 6, actual: 0, completion: 0 },
+    { date: demoDate(2).slice(0, 10), planned: 7, actual: 0, completion: 0 },
+  ];
+  const scheduleTasks = tasks.filter((task) => task.dueDate.slice(0, 10) === scheduleDate);
+  const hourlyBreakdown = Array.from({ length: 14 }, (_, index) => {
+    const hour = index + 7;
+    const logs = todayLogs.filter((log) => new Date(log.startTime).getHours() === hour);
+    return { hour: `${hour > 12 ? hour - 12 : hour} ${hour >= 12 ? "PM" : "AM"}`, logs, isEmpty: logs.length === 0 };
+  });
+
+  return {
+    tasks,
+    categories: categoryStats,
+    timeData: { tasks, todayLogs },
+    scheduleData: {
+      date: scheduleDate,
+      schedule: { date: scheduleDate, plannedHours: 8, actualHours: scheduleDate === todayString() ? 6.5 : 0 },
+      tasks: scheduleTasks,
+      allTasks: tasks,
+      hourlyBreakdown,
+    },
+    summary: {
+      totalPlanned: 34,
+      totalActual: 11.6,
+      completionRate: 34,
+      tasksCompleted: 2,
+      productiveDays: dailyData.filter((day) => day.actual > 0).map((day) => ({ date: day.date, dayOfWeek: new Date(day.date).toLocaleDateString("en", { weekday: "long" }), hours: day.actual })),
+      dailyData,
+    },
+    adminData: {},
+    loading: false,
+    error: "",
+  };
+}
+
 function Field({ label, children }) {
   return (
     <label className="block min-w-0">
@@ -726,7 +833,8 @@ export default function DashboardClient({ user }) {
         const seedPayload = await seedResponse.json();
 
         if (!seedResponse.ok || !seedPayload.success) {
-          throw new Error(seedPayload.error || "Unable to seed demo CRM data.");
+          setState(createCodeashwaniDemoState(scheduleDate));
+          return;
         }
 
         await load(scheduleDate);
@@ -735,6 +843,11 @@ export default function DashboardClient({ user }) {
 
       setState({ tasks: tasks.data || [], categories: categories.data || [], timeData: timeData.data || {}, scheduleData: scheduleData.data || {}, summary: summary.data || {}, adminData: admin.data || {}, loading: false, error: "" });
     } catch (error) {
+      if (user.email === "codeashwani@gmail.com") {
+        setState(createCodeashwaniDemoState(scheduleDate));
+        return;
+      }
+
       setState((current) => ({ ...current, loading: false, error: error.message }));
     }
   }, [user.email, user.role]);

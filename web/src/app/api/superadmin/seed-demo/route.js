@@ -115,7 +115,7 @@ export async function POST() {
   } catch (error) {
     console.error("POST /api/superadmin/seed-demo failed.", error);
     return NextResponse.json(
-      { success: false, error: "Unable to seed demo user." },
+      { success: false, error: `Unable to seed demo user: ${error.message}` },
       { status: 500 }
     );
   }
