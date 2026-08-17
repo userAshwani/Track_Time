@@ -29,5 +29,7 @@
       "name": "Daily Schedule",
       "url": "/dashboard?view=daily"
     }
-  ]
+  ],
+  "categories": ["productivity", "business"],
+  "prefer_related_applications": false
 }

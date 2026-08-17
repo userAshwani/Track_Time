@@ -1,4 +1,4 @@
-const CACHE_NAME = "track-time-shell-v2";
+const CACHE_NAME = "track-time-shell-v3";
 const SHELL = ["/", "/login", "/dashboard", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
