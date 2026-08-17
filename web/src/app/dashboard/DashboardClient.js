@@ -34,6 +34,15 @@ function todayString() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function dateString(value) {
+  return value ? new Date(value).toISOString().slice(0, 10) : "";
+}
+
+function localDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function toLocalInput(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -49,9 +58,40 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "No date";
 }
 
+function formatElapsed(totalSeconds) {
+  const hoursValue = Math.floor(totalSeconds / 3600);
+  const minutesValue = Math.floor((totalSeconds % 3600) / 60);
+  const secondsValue = totalSeconds % 60;
+  return `${hoursValue}h ${minutesValue}m ${secondsValue}s`;
+}
+
 function normalizeCategoryIdForSubmit(categoryId) {
   const value = String(categoryId || "").trim();
   return value.startsWith("demo-cat-") ? "" : value;
+}
+
+function buildMonthDays(monthDate, tasks = []) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  const days = [];
+
+  for (let index = 0; index < 42; index += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    const iso = localDateKey(day);
+    days.push({
+      iso,
+      label: day.getDate(),
+      isCurrentMonth: day.getMonth() === month,
+      isToday: iso === todayString(),
+      tasks: tasks.filter((task) => dateString(task.dueDate) === iso),
+    });
+  }
+
+  return days;
 }
 
 function demoDate(offsetDays = 0, hour = 9, minute = 0) {
@@ -337,7 +377,7 @@ function TaskForm({ categories, task, onSubmit, onCancel }) {
   );
 }
 
-function TasksView({ tasks, categories, reload }) {
+function TasksView({ tasks, categories, reload, timer }) {
   const [editing, setEditing] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [filters, setFilters] = useState({ search: "", status: "all", priority: "all", date_filter: "" });
@@ -392,35 +432,42 @@ function TasksView({ tasks, categories, reload }) {
         </div>
       </div>
       {showCreate ? <TaskForm categories={categories} onSubmit={saveTask} onCancel={() => setShowCreate(false)} /> : null}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="space-y-3">
         {visibleTasks.map((task) => {
           const logged = hours(task.timeLogs?.reduce((sum, log) => sum + log.durationMinutes, 0) || task.timeSpent);
           const estimate = Number(task.estimatedHours) || hours(task.timeAllocated);
           const progress = estimate > 0 ? Math.min(100, Math.round((logged / estimate) * 100)) : 0;
+          const isRunning = timer.activeTimer?.taskId === task._id;
           return (
             <article key={task._id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               {editing?._id === task._id ? (
                 <TaskForm categories={categories} task={editing} onSubmit={saveTask} onCancel={() => setEditing(null)} />
               ) : (
                 <>
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="min-w-0 text-lg font-bold text-slate-950">{task.title}</h3>
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${task.priority === "high" ? "bg-red-100 text-red-700" : task.priority === "medium" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>{task.priority}</span>
-                  </div>
-                  {task.category ? <p className="mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold" style={{ backgroundColor: `${task.category.color}20`, color: task.category.color }}>{task.category.name}</p> : null}
-                  {task.description ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{task.description}</p> : null}
-                  <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                    <span className="rounded-lg bg-slate-50 p-2 font-semibold text-slate-600">{task.status.replace("_", " ")}</span>
-                    <span className="rounded-lg bg-slate-50 p-2 font-semibold text-slate-600">{formatDate(task.dueDate)}</span>
-                  </div>
-                  <div className="mt-4">
-                    <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{logged}h / {estimate}h</span><span>{progress}%</span></div>
-                    <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {task.status !== "completed" ? <button className={subtleButton} onClick={() => saveTask({ ...task, status: "completed" })}><CheckCircle2 className="h-4 w-4" />Complete</button> : null}
-                    <button className={subtleButton} onClick={() => setEditing(task)}>Edit</button>
-                    <button className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteTask(task)}><Trash2 className="h-4 w-4" />Delete</button>
+                  <div className="grid gap-4 lg:grid-cols-[1fr_220px_270px] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-start gap-2">
+                        <h3 className="min-w-0 text-lg font-bold text-slate-950">{task.title}</h3>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${task.priority === "high" ? "bg-red-100 text-red-700" : task.priority === "medium" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>{task.priority}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                        {task.category ? <span className="inline-flex rounded-full px-3 py-1 text-xs font-bold" style={{ backgroundColor: `${task.category.color}20`, color: task.category.color }}>{task.category.name}</span> : null}
+                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{task.status.replace("_", " ")}</span>
+                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{formatDate(task.dueDate)}</span>
+                      </div>
+                      {task.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{task.description}</p> : null}
+                    </div>
+                    <div>
+                      <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{logged}h / {estimate}h</span><span>{progress}%</span></div>
+                      <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-emerald-600" style={{ width: `${progress}%` }} /></div>
+                    </div>
+                    <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+                      <button type="button" className={primaryButton} onClick={() => timer.startTask(task)} disabled={Boolean(timer.activeTimer) && !isRunning}><Play className="h-4 w-4" />Start</button>
+                      <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:bg-slate-300" onClick={timer.stopTask} disabled={!isRunning}><Square className="h-4 w-4" />Stop</button>
+                      {task.status !== "completed" ? <button className={subtleButton} onClick={() => saveTask({ ...task, status: "completed" })}><CheckCircle2 className="h-4 w-4" />Complete</button> : null}
+                      <button className={subtleButton} onClick={() => setEditing(task)}>Edit</button>
+                      <button className="inline-flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteTask(task)}><Trash2 className="h-4 w-4" />Delete</button>
+                    </div>
                   </div>
                 </>
               )}
@@ -536,20 +583,11 @@ function CategoriesView({ categories, tasks, reload }) {
   );
 }
 
-function TimerView({ timeData, reload }) {
+function TimerView({ timeData, reload, timer }) {
   const [form, setForm] = useState({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
-  const [activeTimer, setActiveTimer] = useState(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const totalToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
-  const activeTask = timeData.tasks?.find((task) => task._id === activeTimer?.taskId);
-
-  useEffect(() => {
-    if (!activeTimer) return undefined;
-    const interval = window.setInterval(() => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activeTimer.startedAt) / 1000)));
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [activeTimer]);
+  const selectedTask = timeData.tasks?.find((task) => task._id === form.taskId);
+  const activeTask = timeData.tasks?.find((task) => task._id === timer.activeTimer?.taskId);
 
   async function saveLog(event) {
     event.preventDefault();
@@ -570,43 +608,6 @@ function TimerView({ timeData, reload }) {
     await reload();
   }
 
-  function startTimer() {
-    if (!form.taskId) {
-      alert("Choose a task first.");
-      return;
-    }
-    const startedAt = Date.now();
-    setActiveTimer({ taskId: form.taskId, startedAt });
-    setElapsedSeconds(0);
-    setForm((current) => ({ ...current, startTime: toLocalInput(new Date(startedAt)), endTime: "" }));
-  }
-
-  async function stopTimer() {
-    if (!activeTimer) return;
-    const endTime = new Date();
-    const durationMinutes = Math.max(1, Math.round((endTime.getTime() - activeTimer.startedAt) / 60000));
-    const response = await fetch("/api/time-logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        taskId: activeTimer.taskId,
-        startTime: new Date(activeTimer.startedAt),
-        endTime,
-        durationMinutes,
-        notes: form.notes || "Tracked with start/stop timer.",
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.success) {
-      alert(payload.error || "Unable to save tracked time.");
-      return;
-    }
-    setActiveTimer(null);
-    setElapsedSeconds(0);
-    setForm({ taskId: "", startTime: toLocalInput(new Date()), endTime: "", notes: "" });
-    await reload();
-  }
-
   return (
     <section className="space-y-5">
       <div className="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
@@ -614,15 +615,34 @@ function TimerView({ timeData, reload }) {
           <div>
             <p className="text-sm font-bold text-emerald-700">Live tracker</p>
             <h2 className="mt-1 text-2xl font-bold text-slate-950">{activeTask?.title || "Select a task and start tracking"}</h2>
-            <p className="mt-1 text-sm text-slate-500">{activeTimer ? `Running for ${Math.floor(elapsedSeconds / 3600)}h ${Math.floor((elapsedSeconds % 3600) / 60)}m ${elapsedSeconds % 60}s` : "Track actual work time directly from this CRM."}</p>
+            <p className="mt-1 text-sm text-slate-500">{timer.activeTimer ? `Running for ${formatElapsed(timer.elapsedSeconds)}` : "Track actual work time directly from this CRM."}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={primaryButton} onClick={startTimer} disabled={Boolean(activeTimer)}><Play className="h-4 w-4" />Start</button>
-            <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:bg-slate-300" onClick={stopTimer} disabled={!activeTimer}><Square className="h-4 w-4" />Stop</button>
+            <button type="button" className={primaryButton} onClick={() => selectedTask && timer.startTask(selectedTask)} disabled={!selectedTask || Boolean(timer.activeTimer)}><Play className="h-4 w-4" />Start</button>
+            <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:bg-slate-300" onClick={timer.stopTask} disabled={!timer.activeTimer}><Square className="h-4 w-4" />Stop</button>
           </div>
         </div>
       </div>
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-5 xl:grid-cols-[0.8fr_0.8fr_1fr]">
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-xl font-bold text-slate-950">Choose Task</h2>
+        <div className="mt-4 max-h-[540px] space-y-2 overflow-y-auto">
+          {timeData.tasks?.map((task) => {
+            const isRunning = timer.activeTimer?.taskId === task._id;
+            return (
+              <button key={task._id} type="button" onClick={() => setForm((current) => ({ ...current, taskId: task._id }))} className={`w-full rounded-lg border p-3 text-left transition ${form.taskId === task._id ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-950">{task.title}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">{task.category?.name || "No category"} - {task.status.replace("_", " ")}</p>
+                  </div>
+                  {isRunning ? <span className="rounded-full bg-emerald-600 px-2 py-1 text-xs font-bold text-white">Running</span> : null}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <form onSubmit={saveLog} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-xl font-bold text-slate-950">Manual Time Entry</h2>
         <div className="mt-4 grid gap-4">
@@ -662,15 +682,49 @@ function DailyView({ scheduleData, reload }) {
   const [date, setDate] = useState(scheduleData.date || todayString());
   const [plannedHours, setPlannedHours] = useState(scheduleData.schedule?.plannedHours ?? 8);
   const [taskId, setTaskId] = useState("");
+  const [monthDate, setMonthDate] = useState(() => new Date(`${scheduleData.date || todayString()}T12:00:00`));
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState(null);
   const completion = scheduleData.schedule?.plannedHours ? Math.min(100, Math.round((scheduleData.schedule.actualHours / scheduleData.schedule.plannedHours) * 100)) : 0;
+  const allTasks = scheduleData.allTasks || [];
+  const selectedTasks = allTasks
+    .filter((task) => dateString(task.dueDate) === date)
+    .sort((a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0));
+  const monthDays = buildMonthDays(monthDate, allTasks);
+  const monthTitle = monthDate.toLocaleDateString("en", { month: "long", year: "numeric" });
 
   async function loadDate(nextDate) {
     setDate(nextDate);
+    setShowCreate(false);
+    setEditing(null);
     await reload(nextDate);
+  }
+
+  function moveMonth(direction) {
+    setMonthDate((current) => {
+      const next = new Date(current);
+      next.setMonth(current.getMonth() + direction);
+      return next;
+    });
   }
 
   async function postSchedule(body) {
     await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await reload(date);
+  }
+
+  async function saveTask(task) {
+    const isEdit = Boolean(task._id);
+    const dueDate = task.dueDate || `${date}T09:00`;
+    const response = await fetch("/api/tasks", {
+      method: isEdit ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(isEdit ? { id: task._id, ...task, dueDate } : { ...task, dueDate }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.error || payload.errors?.join(" ") || "Unable to save task.");
+    setShowCreate(false);
+    setEditing(null);
     await reload(date);
   }
 
@@ -683,7 +737,28 @@ function DailyView({ scheduleData, reload }) {
           <button className={primaryButton} onClick={() => postSchedule({ action: "planned-hours", date, plannedHours })}>Update</button>
         </div>
       </div>
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold text-slate-950">{monthTitle}</h2>
+            <div className="flex gap-2">
+              <button type="button" className={subtleButton} onClick={() => moveMonth(-1)}>Prev</button>
+              <button type="button" className={subtleButton} onClick={() => { const today = new Date(); setMonthDate(today); loadDate(todayString()); }}>Today</button>
+              <button type="button" className={subtleButton} onClick={() => moveMonth(1)}>Next</button>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-2">
+            {monthDays.map((day) => (
+              <button key={day.iso} type="button" onClick={() => loadDate(day.iso)} className={`min-h-20 rounded-lg border p-2 text-left transition ${day.iso === date ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"} ${day.isCurrentMonth ? "" : "opacity-45"}`}>
+                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold ${day.isToday ? "bg-slate-950 text-white" : "text-slate-700"}`}>{day.label}</span>
+                {day.tasks.length > 0 ? <p className="mt-2 rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">{day.tasks.length} task{day.tasks.length > 1 ? "s" : ""}</p> : null}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
             <Metric icon={Clock3} label="Planned" value={`${scheduleData.schedule?.plannedHours ?? 0}h`} helper="Target hours" />
@@ -701,16 +776,35 @@ function DailyView({ scheduleData, reload }) {
             </select>
             <button className={primaryButton} onClick={() => taskId && postSchedule({ action: "add-task", date, taskId })}><Plus className="h-4 w-4" />Add</button>
           </div>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">{formatDate(`${date}T12:00:00`)}</h2>
+              <p className="text-sm font-semibold text-slate-500">{selectedTasks.length} task{selectedTasks.length === 1 ? "" : "s"} for this day</p>
+            </div>
+            <button className={primaryButton} onClick={() => { setEditing(null); setShowCreate(true); }}><Plus className="h-4 w-4" />Create Task</button>
+          </div>
+          {showCreate ? <div className="mt-5"><TaskForm categories={scheduleData.categories || []} task={{ dueDate: `${date}T09:00` }} onSubmit={saveTask} onCancel={() => setShowCreate(false)} /></div> : null}
+          {editing ? <div className="mt-5"><TaskForm categories={scheduleData.categories || []} task={editing} onSubmit={saveTask} onCancel={() => setEditing(null)} /></div> : null}
           <div className="mt-5 space-y-3">
-            {scheduleData.tasks?.map((task) => <div key={task._id} className="rounded-lg border-l-4 bg-slate-50 p-3" style={{ borderLeftColor: task.category?.color || "#6B7280" }}><p className="font-bold">{task.title}</p><p className="text-sm text-slate-500">{task.priority} priority - {task.status.replace("_", " ")}</p></div>)}
-            {scheduleData.tasks?.length === 0 ? <p className="text-sm text-slate-500">No tasks scheduled for this day.</p> : null}
+            {selectedTasks.map((task) => (
+              <div key={task._id} className="rounded-lg border-l-4 bg-slate-50 p-3" style={{ borderLeftColor: task.category?.color || "#6B7280" }}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold">{task.title}</p>
+                    <p className="text-sm text-slate-500">{task.priority} priority - {task.status.replace("_", " ")} - {new Date(task.dueDate).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>
+                  </div>
+                  <button type="button" className={subtleButton} onClick={() => { setShowCreate(false); setEditing(task); }}>Edit</button>
+                </div>
+              </div>
+            ))}
+            {selectedTasks.length === 0 ? <p className="text-sm text-slate-500">No tasks scheduled for this day.</p> : null}
           </div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">Hourly Breakdown</h2>
-          <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto">
-            {scheduleData.hourlyBreakdown?.map((hour) => <div key={hour.hour} className="rounded-lg bg-slate-50 p-2"><p className="text-sm font-bold text-slate-700">{hour.hour}</p>{hour.logs.map((log) => <p key={log._id} className="text-xs text-slate-500">{log.task?.title} - {hours(log.durationMinutes)}h</p>)}{hour.isEmpty ? <p className="text-xs text-slate-400">No activity</p> : null}</div>)}
-          </div>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-950">Hourly Breakdown</h2>
+        <div className="mt-4 grid max-h-[620px] gap-2 overflow-y-auto md:grid-cols-2 xl:grid-cols-4">
+          {scheduleData.hourlyBreakdown?.map((hour) => <div key={hour.hour} className="rounded-lg bg-slate-50 p-2"><p className="text-sm font-bold text-slate-700">{hour.hour}</p>{hour.logs.map((log) => <p key={log._id} className="text-xs text-slate-500">{log.task?.title} - {hours(log.durationMinutes)}h</p>)}{hour.isEmpty ? <p className="text-xs text-slate-400">No activity</p> : null}</div>)}
         </div>
       </div>
     </section>
@@ -1063,10 +1157,27 @@ function AdminView({ data, reload }) {
   );
 }
 
+function FloatingTimer({ timer }) {
+  if (!timer.activeTimer) return null;
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-emerald-200 bg-white p-4 shadow-xl">
+      <p className="text-xs font-bold uppercase text-emerald-700">Running task</p>
+      <h3 className="mt-1 line-clamp-2 text-base font-bold text-slate-950">{timer.activeTimer.title}</h3>
+      <p className="mt-1 text-sm font-semibold text-slate-500">{formatElapsed(timer.elapsedSeconds)}</p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" onClick={timer.stopTask}><Square className="h-4 w-4" />Stop</button>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardClient({ user }) {
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
   const [state, setState] = useState({ tasks: [], categories: [], timeData: {}, scheduleData: {}, summary: {}, adminData: {}, loading: true, error: "" });
+  const [activeTimer, setActiveTimer] = useState(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const demoSeededRef = useRef(false);
 
   const load = useCallback(async (scheduleDate = todayString()) => {
@@ -1123,18 +1234,59 @@ export default function DashboardClient({ user }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!activeTimer) return undefined;
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activeTimer.startedAt) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeTimer]);
+
+  const startTask = useCallback((task) => {
+    if (!task || activeTimer) return;
+    setActiveTimer({ taskId: task._id, title: task.title, startedAt: Date.now() });
+    setElapsedSeconds(0);
+  }, [activeTimer]);
+
+  const stopTask = useCallback(async () => {
+    if (!activeTimer) return;
+    const endTime = new Date();
+    const durationMinutes = Math.max(1, Math.round((endTime.getTime() - activeTimer.startedAt) / 60000));
+    const response = await fetch("/api/time-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: activeTimer.taskId,
+        startTime: new Date(activeTimer.startedAt),
+        endTime,
+        durationMinutes,
+        notes: "Tracked with start/stop timer.",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) {
+      setState((current) => ({ ...current, error: payload.error || "Unable to save tracked time." }));
+      return;
+    }
+    setActiveTimer(null);
+    setElapsedSeconds(0);
+    await load();
+  }, [activeTimer, load]);
+
+  const timer = useMemo(() => ({ activeTimer, elapsedSeconds, startTask, stopTask }), [activeTimer, elapsedSeconds, startTask, stopTask]);
+
   const content = useMemo(() => {
     if (state.loading) return <p className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-bold text-slate-500">Loading workspace...</p>;
     if (state.error) return <p className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">{state.error}</p>;
-    if (activeView === "tasks") return <TasksView tasks={state.tasks} categories={state.categories} reload={load} />;
+    if (activeView === "tasks") return <TasksView tasks={state.tasks} categories={state.categories} reload={load} timer={timer} />;
     if (activeView === "categories") return <CategoriesView categories={state.categories} tasks={state.tasks} reload={load} />;
-    if (activeView === "timer") return <TimerView timeData={state.timeData} reload={load} />;
+    if (activeView === "timer") return <TimerView timeData={state.timeData} reload={load} timer={timer} />;
     if (activeView === "daily") return <DailyView key={state.scheduleData.date || "daily"} scheduleData={state.scheduleData} reload={load} />;
     if (activeView === "summary") return <SummaryView summary={state.summary} />;
     if (activeView === "profile") return <ProfileView user={user} />;
     if (activeView === "admin") return <AdminView data={state.adminData} reload={load} />;
     return <Overview user={user} tasks={state.tasks} timeData={state.timeData} />;
-  }, [activeView, state, user, load]);
+  }, [activeView, state, user, load, timer]);
 
-  return <div className="mx-auto max-w-7xl">{content}</div>;
+  return <div className="mx-auto max-w-7xl">{content}<FloatingTimer timer={timer} /></div>;
 }

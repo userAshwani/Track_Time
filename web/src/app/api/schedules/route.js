@@ -73,9 +73,10 @@ export async function GET(request) {
   ]);
   const actualHours = Math.round((timeLogs.reduce((sum, log) => sum + log.durationMinutes, 0) / 60) * 10) / 10;
   await DailySchedule.updateOne({ _id: schedule._id }, { $set: { actualHours } });
-  const [tasks, allTasks] = await Promise.all([
+  const [tasks, allTasks, categories] = await Promise.all([
     Task.find({ userId: currentUser._id, dueDate: { $gte: start, $lte: end } }).sort({ scheduleOrder: 1, dueDate: 1 }).lean(),
-    Task.find({ userId: currentUser._id, status: { $in: ["pending", "in_progress"] } }).sort({ title: 1 }).lean(),
+    Task.find({ userId: currentUser._id }).sort({ dueDate: 1, title: 1 }).lean(),
+    Category.find({ userId: currentUser._id }).sort({ name: 1 }).lean(),
   ]);
   const detailedTasks = await attachCategories(tasks);
   const detailedAllTasks = await attachCategories(allTasks);
@@ -93,7 +94,7 @@ export async function GET(request) {
       isEmpty: logs.length === 0,
     };
   });
-  return jsonResponse({ success: true, data: { date, schedule: { ...schedule, actualHours }, tasks: detailedTasks, allTasks: detailedAllTasks, hourlyBreakdown } });
+  return jsonResponse({ success: true, data: { date, schedule: { ...schedule, actualHours }, tasks: detailedTasks, allTasks: detailedAllTasks, categories, hourlyBreakdown } });
 }
 
 export async function POST(request) {

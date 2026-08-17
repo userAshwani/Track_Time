@@ -69,6 +69,7 @@ export async function GET(request) {
     TimeLog.find({ userId: currentUser._id, startTime: { $gte: weekStart, $lte: weekEnd } }).lean(),
   ]);
 
+  const detailedTasks = await attachTasks(tasks.map((task) => ({ _id: task._id, taskId: task._id })));
   const detailedTodayLogs = await attachTasks(todayLogs);
   const detailedWeeklyLogs = await attachTasks(weeklyLogs);
   const dailyHours = Array.from({ length: 7 }, (_, index) => {
@@ -96,7 +97,7 @@ export async function GET(request) {
     success: true,
     data: {
       date,
-      tasks,
+      tasks: detailedTasks.map((item) => item.task).filter(Boolean),
       todayLogs: detailedTodayLogs,
       dailyHours,
       categoryBreakdown: Object.values(categoryBreakdown),
