@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 
 import dbConnect from "../../../../lib/dbConnect.js";
 import { getCurrentUser } from "../../../../lib/auth.js";
+import {
+  combineDateAndTime,
+  dateKey,
+  isTaskScheduledOnDate,
+  normalizeTimeString,
+  taskCoversHour,
+} from "../../../../lib/taskSchedule.js";
 import Category from "../../../../models/Category.js";
 import DailySchedule from "../../../../models/DailySchedule.js";
 import Task from "../../../../models/Task.js";
@@ -65,7 +72,7 @@ export async function GET(request) {
     return jsonResponse({ success: true, data: { schedules, totalPlanned, totalActual, completionRate: totalPlanned > 0 ? Math.round((totalActual / totalPlanned) * 1000) / 10 : 0, tasksCompleted, dailyData, productiveDays, dayOfWeekAverage } });
   }
 
-  const date = params.get("date") || new Date().toISOString().slice(0, 10);
+  const date = params.get("date") || dateKey(new Date());
   const [start, end] = dateBounds(date);
   const [timeLogs, schedule] = await Promise.all([
     TimeLog.find({ userId: currentUser._id, startTime: { $gte: start, $lte: end } }).lean(),
@@ -73,11 +80,19 @@ export async function GET(request) {
   ]);
   const actualHours = Math.round((timeLogs.reduce((sum, log) => sum + log.durationMinutes, 0) / 60) * 10) / 10;
   await DailySchedule.updateOne({ _id: schedule._id }, { $set: { actualHours } });
-  const [tasks, allTasks, categories] = await Promise.all([
-    Task.find({ userId: currentUser._id, dueDate: { $gte: start, $lte: end } }).sort({ scheduleOrder: 1, dueDate: 1 }).lean(),
-    Task.find({ userId: currentUser._id }).sort({ dueDate: 1, title: 1 }).lean(),
+  const [rangeTasks, allTasks, categories] = await Promise.all([
+    Task.find({
+      userId: currentUser._id,
+      $or: [
+        { startDate: { $lte: end }, dueDate: { $gte: start } },
+        { startDate: null, dueDate: { $gte: start, $lte: end } },
+        { dueDate: null, startDate: { $gte: start, $lte: end } },
+      ],
+    }).sort({ scheduleOrder: 1, startDate: 1, dueDate: 1 }).lean(),
+    Task.find({ userId: currentUser._id }).sort({ startDate: 1, dueDate: 1, title: 1 }).lean(),
     Category.find({ userId: currentUser._id }).sort({ name: 1 }).lean(),
   ]);
+  const tasks = rangeTasks.filter((task) => isTaskScheduledOnDate(task, date));
   const detailedTasks = await attachCategories(tasks);
   const detailedAllTasks = await attachCategories(allTasks);
   const detailedLogs = await Promise.all(timeLogs.map(async (log) => {
@@ -88,10 +103,12 @@ export async function GET(request) {
   const hourlyBreakdown = Array.from({ length: 17 }, (_, index) => {
     const hour = index + 7;
     const logs = detailedLogs.filter((log) => new Date(log.startTime).getHours() === hour);
+    const plannedTasks = detailedTasks.filter((task) => taskCoversHour(task, date, hour));
     return {
       hour: new Date(2000, 0, 1, hour).toLocaleTimeString("en", { hour: "numeric" }),
       logs,
-      isEmpty: logs.length === 0,
+      plannedTasks,
+      isEmpty: logs.length === 0 && plannedTasks.length === 0,
     };
   });
   return jsonResponse({ success: true, data: { date, schedule: { ...schedule, actualHours }, tasks: detailedTasks, allTasks: detailedAllTasks, categories, hourlyBreakdown } });
@@ -114,8 +131,24 @@ export async function POST(request) {
   }
   if (body.action === "add-task") {
     const date = body.date;
-    const dueDate = new Date(`${date}T09:00:00.000`);
-    const task = await Task.findOneAndUpdate({ _id: body.taskId || body.task_id, userId: currentUser._id }, { $set: { dueDate } }, { new: true }).lean();
+    const slotStart = normalizeTimeString(body.slotStart || "09:00", "09:00");
+    const slotEnd = normalizeTimeString(body.slotEnd || "10:00", "10:00");
+    const startDate = combineDateAndTime(date, slotStart, slotStart);
+    const dueDate = combineDateAndTime(date, slotEnd, slotEnd);
+    const task = await Task.findOneAndUpdate(
+      { _id: body.taskId || body.task_id, userId: currentUser._id },
+      {
+        $set: {
+          startDate,
+          dueDate,
+          slotStart,
+          slotEnd,
+          isAlarmSet: true,
+          alarmTime: startDate,
+        },
+      },
+      { new: true }
+    ).lean();
     if (!task) {
       return jsonResponse({ success: false, error: "Task not found." }, 404);
     }

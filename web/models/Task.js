@@ -86,10 +86,52 @@ const TaskSchema = new Schema(
       default: "",
       select: false,
     },
+    startDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     dueDate: {
       type: Date,
       default: null,
       index: true,
+    },
+    slotStart: {
+      type: String,
+      trim: true,
+      default: "09:00",
+      match: [/^([01]\d|2[0-3]):([0-5]\d)$/, "slotStart must use HH:mm."],
+    },
+    slotEnd: {
+      type: String,
+      trim: true,
+      default: "10:00",
+      match: [/^([01]\d|2[0-3]):([0-5]\d)$/, "slotEnd must use HH:mm."],
+    },
+    weeklyDays: {
+      type: [
+        {
+          type: Number,
+          min: 0,
+          max: 6,
+        },
+      ],
+      default: () => [0, 1, 2, 3, 4, 5, 6],
+      validate: {
+        validator(days) {
+          return Array.isArray(days) && days.length > 0 && days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6);
+        },
+        message: "weeklyDays must include at least one weekday from 0 (Sun) to 6 (Sat).",
+      },
+    },
+    scheduleConfirmed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    lastReminderAt: {
+      type: Date,
+      default: null,
     },
     estimatedHours: {
       type: Number,
@@ -111,12 +153,27 @@ const TaskSchema = new Schema(
 TaskSchema.index({ timeHorizon: 1, status: 1, updatedAt: -1 });
 TaskSchema.index({ userId: 1, timeHorizon: 1, status: 1, updatedAt: -1 });
 TaskSchema.index({ userId: 1, dueDate: 1, scheduleOrder: 1 });
+TaskSchema.index({ userId: 1, startDate: 1, dueDate: 1 });
 TaskSchema.index({ isAlarmSet: 1, alarmTime: 1 });
 TaskSchema.index({ createdAt: -1 });
 
 TaskSchema.pre("validate", function validateAlarmConfiguration() {
   if (this.isAlarmSet && !this.alarmTime) {
     this.invalidate("alarmTime", "Alarm time is required when an alarm is enabled.");
+  }
+
+  if (this.slotStart && this.slotEnd) {
+    const [startHours, startMinutes] = String(this.slotStart).split(":").map(Number);
+    const [endHours, endMinutes] = String(this.slotEnd).split(":").map(Number);
+    const startTotal = startHours * 60 + startMinutes;
+    const endTotal = endHours * 60 + endMinutes;
+    if (endTotal <= startTotal) {
+      this.invalidate("slotEnd", "Time slot end must be after the start time.");
+    }
+  }
+
+  if (this.startDate && this.dueDate && this.dueDate < this.startDate) {
+    this.invalidate("dueDate", "Due date cannot be earlier than start date.");
   }
 });
 

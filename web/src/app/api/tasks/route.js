@@ -7,11 +7,18 @@ import { deleteCache, getCache, setCache } from "../../../../lib/cache.js";
 import Category from "../../../../models/Category.js";
 import Task, { TASK_PRIORITIES, TASK_STATUSES, TIME_HORIZONS } from "../../../../models/Task.js";
 import TimeLog from "../../../../models/TimeLog.js";
+import {
+  combineDateAndTime,
+  dateKey,
+  normalizeTimeString,
+  normalizeWeeklyDays,
+  parseTimeToMinutes,
+} from "../../../../lib/taskSchedule.js";
 
 export const runtime = "nodejs";
 
 const CACHE_TTL_SECONDS = 60;
-const CACHE_NAMESPACE = "track-time:tasks:v1";
+const CACHE_NAMESPACE = "track-time:tasks:v2";
 
 function jsonResponse(payload, status = 200, headers = {}) {
   return NextResponse.json(payload, {
@@ -51,22 +58,68 @@ function normalizeObjectId(value) {
   return mongoose.Types.ObjectId.isValid(id) ? id : null;
 }
 
+function resolveScheduleFields(body) {
+  const slotStart = normalizeTimeString(body.slotStart ?? body.slot_start ?? body.workStartTime, "09:00");
+  const slotEnd = normalizeTimeString(body.slotEnd ?? body.slot_end ?? body.workEndTime, "10:00");
+  const weeklyDays = normalizeWeeklyDays(body.weeklyDays ?? body.weekly_days);
+
+  const startRaw = body.startDate ?? body.start_date;
+  const dueRaw = body.dueDate ?? body.due_date;
+
+  let startDate = startRaw ? new Date(startRaw) : null;
+  let dueDate = dueRaw ? new Date(dueRaw) : null;
+
+  if (startRaw && String(startRaw).length <= 10) {
+    startDate = combineDateAndTime(startRaw, slotStart, slotStart);
+  }
+  if (dueRaw && String(dueRaw).length <= 10) {
+    dueDate = combineDateAndTime(dueRaw, slotEnd, slotEnd);
+  }
+
+  if (!startDate && dueDate) {
+    startDate = combineDateAndTime(dueDate, slotStart, slotStart);
+  }
+  if (!dueDate && startDate) {
+    dueDate = combineDateAndTime(startDate, slotEnd, slotEnd);
+  }
+
+  return {
+    startDate: startDate && !Number.isNaN(startDate.getTime()) ? startDate : null,
+    dueDate: dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate : null,
+    slotStart,
+    slotEnd,
+    weeklyDays,
+    scheduleConfirmed:
+      body.scheduleConfirmed === undefined && body.schedule_confirmed === undefined
+        ? undefined
+        : Boolean(body.scheduleConfirmed ?? body.schedule_confirmed),
+  };
+}
+
 function normalizeTaskPayload(body) {
   const categoryId = body.categoryId || body.category_id;
+  const schedule = resolveScheduleFields(body);
 
   return {
     title: typeof body.title === "string" ? body.title.trim() : "",
     description: typeof body.description === "string" ? body.description.trim() : "",
     status: body.status ?? "pending",
     priority: body.priority ?? "medium",
-    timeHorizon: body.timeHorizon,
-    timeAllocated: normalizeInteger(body.timeAllocated),
+    timeHorizon: body.timeHorizon || "1_Day",
+    timeAllocated: normalizeInteger(body.timeAllocated, Math.max(1, Math.round(Number(body.estimatedHours || body.estimated_hours || 1) * 60))),
     timeSpent: normalizeInteger(body.timeSpent, 0),
-    isAlarmSet: Boolean(body.isAlarmSet),
-    alarmTime: body.alarmTime ? new Date(body.alarmTime) : null,
+    isAlarmSet: Boolean(body.isAlarmSet ?? true),
+    alarmTime: body.alarmTime
+      ? new Date(body.alarmTime)
+      : schedule.startDate || schedule.dueDate,
     pushToken: typeof body.pushToken === "string" ? body.pushToken.trim() : "",
     categoryId: categoryId ? String(categoryId).trim() : null,
-    dueDate: body.dueDate || body.due_date ? new Date(body.dueDate || body.due_date) : null,
+    startDate: schedule.startDate,
+    dueDate: schedule.dueDate,
+    slotStart: schedule.slotStart,
+    slotEnd: schedule.slotEnd,
+    weeklyDays: schedule.weeklyDays,
+    scheduleConfirmed: schedule.scheduleConfirmed ?? false,
     estimatedHours:
       body.estimatedHours === "" || body.estimated_hours === ""
         ? null
@@ -114,8 +167,24 @@ function validateTaskPayload(payload) {
     errors.push("alarmTime must be a valid ISO date.");
   }
 
+  if (payload.startDate && Number.isNaN(payload.startDate.getTime())) {
+    errors.push("startDate must be a valid ISO date.");
+  }
+
   if (payload.dueDate && Number.isNaN(payload.dueDate.getTime())) {
     errors.push("dueDate must be a valid ISO date.");
+  }
+
+  if (payload.startDate && payload.dueDate && payload.dueDate < payload.startDate) {
+    errors.push("dueDate cannot be earlier than startDate.");
+  }
+
+  if (parseTimeToMinutes(payload.slotEnd) <= parseTimeToMinutes(payload.slotStart)) {
+    errors.push("slotEnd must be after slotStart.");
+  }
+
+  if (!Array.isArray(payload.weeklyDays) || payload.weeklyDays.length === 0) {
+    errors.push("weeklyDays must include at least one weekday.");
   }
 
   if (
@@ -182,9 +251,51 @@ function normalizeTaskUpdatePayload(body) {
     payload.categoryId = categoryId ? String(categoryId).trim() : null;
   }
 
-  if (body.dueDate !== undefined || body.due_date !== undefined) {
-    const dueDate = body.dueDate ?? body.due_date;
-    payload.dueDate = dueDate ? new Date(dueDate) : null;
+  const hasExplicitStart = body.startDate !== undefined || body.start_date !== undefined;
+  const hasExplicitDue = body.dueDate !== undefined || body.due_date !== undefined;
+  const hasExplicitSlotStart =
+    body.slotStart !== undefined || body.slot_start !== undefined || body.workStartTime !== undefined;
+  const hasExplicitSlotEnd =
+    body.slotEnd !== undefined || body.slot_end !== undefined || body.workEndTime !== undefined;
+  const hasExplicitWeekly = body.weeklyDays !== undefined || body.weekly_days !== undefined;
+  const hasExplicitConfirmed = body.scheduleConfirmed !== undefined || body.schedule_confirmed !== undefined;
+
+  if (
+    hasExplicitStart ||
+    hasExplicitDue ||
+    hasExplicitSlotStart ||
+    hasExplicitSlotEnd ||
+    hasExplicitWeekly ||
+    hasExplicitConfirmed
+  ) {
+    const schedule = resolveScheduleFields(body);
+    if (hasExplicitStart) {
+      payload.startDate = schedule.startDate;
+    }
+    if (hasExplicitDue) {
+      payload.dueDate = schedule.dueDate;
+    }
+    if (hasExplicitSlotStart) {
+      payload.slotStart = schedule.slotStart;
+    }
+    if (hasExplicitSlotEnd) {
+      payload.slotEnd = schedule.slotEnd;
+    }
+    if (hasExplicitWeekly) {
+      payload.weeklyDays = schedule.weeklyDays;
+    }
+    if (hasExplicitConfirmed) {
+      payload.scheduleConfirmed = schedule.scheduleConfirmed;
+    }
+    if ((hasExplicitStart || hasExplicitSlotStart) && body.alarmTime === undefined && payload.startDate) {
+      payload.alarmTime = payload.startDate;
+      payload.isAlarmSet = true;
+    }
+  }
+
+  if (body.lastReminderAt !== undefined || body.last_reminder_at !== undefined) {
+    const lastReminderAt = body.lastReminderAt ?? body.last_reminder_at;
+    payload.lastReminderAt = lastReminderAt ? new Date(lastReminderAt) : null;
   }
 
   if (body.estimatedHours !== undefined || body.estimated_hours !== undefined) {
@@ -304,11 +415,28 @@ export async function GET(request) {
     if (date) {
       const start = new Date(`${date}T00:00:00.000`);
       const end = new Date(`${date}T23:59:59.999`);
-      query.dueDate = { $gte: start, $lte: end };
+      query.$and = [
+        {
+          $or: [
+            { startDate: { $lte: end }, dueDate: { $gte: start } },
+            { startDate: null, dueDate: { $gte: start, $lte: end } },
+            { dueDate: null, startDate: { $gte: start, $lte: end } },
+          ],
+        },
+      ];
     } else if (dateFilter === "today") {
-      const now = new Date();
-      const yyyyMmDd = now.toISOString().slice(0, 10);
-      query.dueDate = { $gte: new Date(`${yyyyMmDd}T00:00:00.000`), $lte: new Date(`${yyyyMmDd}T23:59:59.999`) };
+      const yyyyMmDd = dateKey(new Date());
+      const start = new Date(`${yyyyMmDd}T00:00:00.000`);
+      const end = new Date(`${yyyyMmDd}T23:59:59.999`);
+      query.$and = [
+        {
+          $or: [
+            { startDate: { $lte: end }, dueDate: { $gte: start } },
+            { startDate: null, dueDate: { $gte: start, $lte: end } },
+            { dueDate: null, startDate: { $gte: start, $lte: end } },
+          ],
+        },
+      ];
     } else if (dateFilter === "week") {
       const now = new Date();
       const start = new Date(now);
@@ -317,10 +445,18 @@ export async function GET(request) {
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
       end.setHours(23, 59, 59, 999);
-      query.dueDate = { $gte: start, $lte: end };
+      query.$and = [
+        {
+          $or: [
+            { startDate: { $lte: end }, dueDate: { $gte: start } },
+            { startDate: null, dueDate: { $gte: start, $lte: end } },
+            { dueDate: null, startDate: { $gte: start, $lte: end } },
+          ],
+        },
+      ];
     }
     const tasks = await Task.find(query)
-      .sort({ dueDate: 1, priority: -1, scheduleOrder: 1, updatedAt: -1 })
+      .sort({ startDate: 1, dueDate: 1, priority: -1, scheduleOrder: 1, updatedAt: -1 })
       .lean();
     const detailedTasks = await attachTaskDetails(tasks);
 
@@ -495,8 +631,28 @@ export async function PATCH(request) {
       validationErrors.push("alarmTime must be a valid ISO date.");
     }
 
+    if (payload.startDate && Number.isNaN(payload.startDate.getTime())) {
+      validationErrors.push("startDate must be a valid ISO date.");
+    }
+
     if (payload.dueDate && Number.isNaN(payload.dueDate.getTime())) {
       validationErrors.push("dueDate must be a valid ISO date.");
+    }
+
+    if (payload.startDate && payload.dueDate && payload.dueDate < payload.startDate) {
+      validationErrors.push("dueDate cannot be earlier than startDate.");
+    }
+
+    if (
+      payload.slotStart !== undefined &&
+      payload.slotEnd !== undefined &&
+      parseTimeToMinutes(payload.slotEnd) <= parseTimeToMinutes(payload.slotStart)
+    ) {
+      validationErrors.push("slotEnd must be after slotStart.");
+    }
+
+    if (payload.weeklyDays !== undefined && (!Array.isArray(payload.weeklyDays) || payload.weeklyDays.length === 0)) {
+      validationErrors.push("weeklyDays must include at least one weekday.");
     }
 
     if (payload.estimatedHours !== undefined && payload.estimatedHours !== null && payload.estimatedHours < 0) {

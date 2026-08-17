@@ -19,6 +19,18 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
+import {
+  DEFAULT_WEEKLY_DAYS,
+  OVERDUE_REMINDER_INTERVAL_MS,
+  REMINDER_OFFSETS_MINUTES,
+  WEEKDAY_OPTIONS,
+  dateKey,
+  formatClock,
+  getTaskSlotBounds,
+  isTaskScheduledOnDate,
+  normalizeTimeString,
+  normalizeWeeklyDays,
+} from "../../../lib/taskSchedule.js";
 
 const COLORS = ["#EF4444", "#F59E0B", "#10B981", "#059669", "#047857", "#0D9488", "#14B8A6", "#16A34A", "#22C55E", "#84CC16", "#06B6D4", "#6B7280"];
 const PRIORITIES = ["low", "medium", "high"];
@@ -31,16 +43,15 @@ const QUOTES = [
 ];
 
 function todayString() {
-  return new Date().toISOString().slice(0, 10);
+  return dateKey(new Date());
 }
 
 function dateString(value) {
-  return value ? new Date(value).toISOString().slice(0, 10) : "";
+  return dateKey(value);
 }
 
 function localDateKey(value) {
-  const date = value instanceof Date ? value : new Date(value);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return dateKey(value);
 }
 
 function toLocalInput(value) {
@@ -48,6 +59,18 @@ function toLocalInput(value) {
   const date = new Date(value);
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function toDateInput(value) {
+  return dateKey(value);
+}
+
+function toTimeInput(value, fallback = "09:00") {
+  if (!value) return fallback;
+  if (/^\d{2}:\d{2}$/.test(String(value))) return normalizeTimeString(value, fallback);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function hours(minutes) {
@@ -87,7 +110,7 @@ function buildMonthDays(monthDate, tasks = []) {
       label: day.getDate(),
       isCurrentMonth: day.getMonth() === month,
       isToday: iso === todayString(),
-      tasks: tasks.filter((task) => dateString(task.dueDate) === iso),
+      tasks: tasks.filter((task) => isTaskScheduledOnDate(task, iso) || dateString(task.dueDate) === iso || dateString(task.startDate) === iso),
     });
   }
 
@@ -136,20 +159,29 @@ function createCodeashwaniDemoState(scheduleDate = todayString()) {
     ["demo-task-portfolio-case", "demo-cat-site", "Publish Track Time CRM case study", "Write problem, stack, features, screenshots, deployment, and future roadmap for ashwanitiwari.com.", "high", "in_progress", 2, 2.5, 80],
     ["demo-task-ats-resume", "demo-cat-mnc", "Update ATS resume for product roles", "Add Track Time CRM, Next.js, MongoDB, Firebase auth, and measurable outcomes.", "high", "pending", 1, 1.5, 0],
     ["demo-task-system-design", "demo-cat-mnc", "System design notes for task CRM", "Cover scaling, indexes, queues, notification workers, analytics aggregation, and caching.", "medium", "pending", 7, 3, 0],
-  ].map(([id, categoryId, title, description, priority, status, offset, estimatedHours, timeSpent], index) => ({
-    _id: id,
-    categoryId,
-    category: byId[categoryId],
-    title,
-    description,
-    priority,
-    status,
-    dueDate: demoDate(offset, 10 + (index % 10)),
-    estimatedHours,
-    timeAllocated: Math.round(estimatedHours * 60),
-    timeSpent,
-    timeLogs: [],
-  }));
+  ].map(([id, categoryId, title, description, priority, status, offset, estimatedHours, timeSpent], index) => {
+    const start = demoDate(offset, 10 + (index % 10));
+    const endHour = Math.min(22, 11 + (index % 8));
+    return {
+      _id: id,
+      categoryId,
+      category: byId[categoryId],
+      title,
+      description,
+      priority,
+      status,
+      startDate: start,
+      dueDate: demoDate(offset + (index % 3), endHour),
+      slotStart: toTimeInput(start, "09:00"),
+      slotEnd: `${String(endHour).padStart(2, "0")}:00`,
+      weeklyDays: [...DEFAULT_WEEKLY_DAYS],
+      scheduleConfirmed: false,
+      estimatedHours,
+      timeAllocated: Math.round(estimatedHours * 60),
+      timeSpent,
+      timeLogs: [],
+    };
+  });
   const todayLogs = [
     ["demo-log-next", "demo-task-next", 110, "Studied routing, server APIs, and Mongo models.", 8],
     ["demo-log-java", "demo-task-java-oop", 75, "Covered collections and exception notes.", 10],
@@ -187,11 +219,16 @@ function createCodeashwaniDemoState(scheduleDate = todayString()) {
     { date: demoDate(1).slice(0, 10), planned: 6, actual: 0, completion: 0 },
     { date: demoDate(2).slice(0, 10), planned: 7, actual: 0, completion: 0 },
   ];
-  const scheduleTasks = tasks.filter((task) => task.dueDate.slice(0, 10) === scheduleDate);
+  const scheduleTasks = tasks.filter((task) => isTaskScheduledOnDate(task, scheduleDate));
   const hourlyBreakdown = Array.from({ length: 14 }, (_, index) => {
     const hour = index + 7;
     const logs = todayLogs.filter((log) => new Date(log.startTime).getHours() === hour);
-    return { hour: `${hour > 12 ? hour - 12 : hour} ${hour >= 12 ? "PM" : "AM"}`, logs, isEmpty: logs.length === 0 };
+    const plannedTasks = scheduleTasks.filter((task) => {
+      const start = Number(String(task.slotStart || "09:00").split(":")[0]);
+      const end = Number(String(task.slotEnd || "10:00").split(":")[0]);
+      return hour >= start && hour < Math.max(start + 1, end);
+    });
+    return { hour: `${hour > 12 ? hour - 12 : hour} ${hour >= 12 ? "PM" : "AM"}`, logs, plannedTasks, isEmpty: logs.length === 0 && plannedTasks.length === 0 };
   });
 
   return {
@@ -307,18 +344,33 @@ function InstallPrompt() {
 }
 
 function TaskForm({ categories, task, onSubmit, onCancel }) {
+  const defaultDate = toDateInput(task?.startDate || task?.dueDate) || todayString();
   const [form, setForm] = useState({
     title: task?.title || "",
     description: task?.description || "",
     categoryId: task?.categoryId || "",
     priority: task?.priority || "medium",
     status: task?.status || "pending",
-    dueDate: toLocalInput(task?.dueDate),
+    startDate: toDateInput(task?.startDate) || defaultDate,
+    dueDate: toDateInput(task?.dueDate) || defaultDate,
+    slotStart: toTimeInput(task?.slotStart || task?.startDate || task?.dueDate, "09:00"),
+    slotEnd: toTimeInput(task?.slotEnd || task?.dueDate, "10:00"),
+    weeklyDays: normalizeWeeklyDays(task?.weeklyDays),
     estimatedHours: task?.estimatedHours ?? "",
   });
 
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleWeekday(day) {
+    setForm((current) => {
+      const exists = current.weeklyDays.includes(day);
+      const weeklyDays = exists
+        ? current.weeklyDays.filter((value) => value !== day)
+        : [...current.weeklyDays, day].sort((a, b) => a - b);
+      return { ...current, weeklyDays: weeklyDays.length ? weeklyDays : [...DEFAULT_WEEKLY_DAYS] };
+    });
   }
 
   return (
@@ -329,10 +381,16 @@ function TaskForm({ categories, task, onSubmit, onCancel }) {
           ...task,
           ...form,
           categoryId: normalizeCategoryIdForSubmit(form.categoryId),
+          startDate: form.startDate || null,
           dueDate: form.dueDate || null,
+          slotStart: form.slotStart,
+          slotEnd: form.slotEnd,
+          weeklyDays: normalizeWeeklyDays(form.weeklyDays),
           estimatedHours: form.estimatedHours === "" ? null : Number(form.estimatedHours),
           timeAllocated: Math.max(1, Math.round((Number(form.estimatedHours) || 1) * 60)),
           timeHorizon: "1_Day",
+          isAlarmSet: true,
+          scheduleConfirmed: task?.scheduleConfirmed || false,
         });
       }}
       className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
@@ -359,12 +417,40 @@ function TaskForm({ categories, task, onSubmit, onCancel }) {
             {STATUSES.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
           </select>
         </Field>
+        <Field label="Start date">
+          <input type="date" className={inputClass} value={form.startDate} onChange={(event) => update("startDate", event.target.value)} required />
+        </Field>
         <Field label="Due date">
-          <input type="datetime-local" className={inputClass} value={form.dueDate} onChange={(event) => update("dueDate", event.target.value)} />
+          <input type="date" className={inputClass} value={form.dueDate} onChange={(event) => update("dueDate", event.target.value)} required />
+        </Field>
+        <Field label="Work slot start">
+          <input type="time" className={inputClass} value={form.slotStart} onChange={(event) => update("slotStart", event.target.value)} required />
+        </Field>
+        <Field label="Work slot end">
+          <input type="time" className={inputClass} value={form.slotEnd} onChange={(event) => update("slotEnd", event.target.value)} required />
         </Field>
         <Field label="Estimated hours">
           <input type="number" min="0" step="0.5" className={inputClass} value={form.estimatedHours} onChange={(event) => update("estimatedHours", event.target.value)} />
         </Field>
+      </div>
+      <div className="mt-4">
+        <span className="mb-2 block text-sm font-semibold text-slate-700">Weekly select</span>
+        <div className="flex flex-wrap gap-2">
+          {WEEKDAY_OPTIONS.map((day) => {
+            const active = form.weeklyDays.includes(day.value);
+            return (
+              <button
+                key={day.value}
+                type="button"
+                onClick={() => toggleWeekday(day.value)}
+                className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${active ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+              >
+                {day.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">Defaults to every weekday. Toggle days this task should appear on.</p>
       </div>
       <Field label="Description">
         <textarea className={inputClass} rows={3} value={form.description} onChange={(event) => update("description", event.target.value)} />
@@ -409,7 +495,7 @@ function TasksView({ tasks, categories, reload, timer }) {
     const today = todayString();
     const matchesDate =
       !filters.date_filter ||
-      (filters.date_filter === "today" && dueDate?.toISOString().slice(0, 10) === today) ||
+      (filters.date_filter === "today" && (isTaskScheduledOnDate(task, today) || dateString(task.dueDate) === today || dateString(task.startDate) === today)) ||
       (filters.date_filter === "week" && dueDate && (dueDate - new Date()) / 86400000 <= 7);
     return matchesSearch && matchesStatus && matchesPriority && matchesDate;
   });
@@ -453,7 +539,8 @@ function TasksView({ tasks, categories, reload, timer }) {
                       <div className="mt-2 flex flex-wrap gap-2 text-sm">
                         {task.category ? <span className="inline-flex rounded-full px-3 py-1 text-xs font-bold" style={{ backgroundColor: `${task.category.color}20`, color: task.category.color }}>{task.category.name}</span> : null}
                         <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{task.status.replace("_", " ")}</span>
-                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{formatDate(task.dueDate)}</span>
+                        <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{formatDate(task.startDate || task.dueDate)} → {formatDate(task.dueDate || task.startDate)}</span>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{normalizeTimeString(task.slotStart || toTimeInput(task.startDate || task.dueDate), "09:00")}–{normalizeTimeString(task.slotEnd || toTimeInput(task.dueDate), "10:00")}</span>
                       </div>
                       {task.description ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{task.description}</p> : null}
                     </div>
@@ -688,8 +775,12 @@ function DailyView({ scheduleData, reload }) {
   const completion = scheduleData.schedule?.plannedHours ? Math.min(100, Math.round((scheduleData.schedule.actualHours / scheduleData.schedule.plannedHours) * 100)) : 0;
   const allTasks = scheduleData.allTasks || [];
   const selectedTasks = allTasks
-    .filter((task) => dateString(task.dueDate) === date)
-    .sort((a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0));
+    .filter((task) => isTaskScheduledOnDate(task, date) || dateString(task.dueDate) === date || dateString(task.startDate) === date)
+    .sort((a, b) => {
+      const aStart = a.slotStart || toTimeInput(a.startDate || a.dueDate, "09:00");
+      const bStart = b.slotStart || toTimeInput(b.startDate || b.dueDate, "09:00");
+      return aStart.localeCompare(bStart);
+    });
   const monthDays = buildMonthDays(monthDate, allTasks);
   const monthTitle = monthDate.toLocaleDateString("en", { month: "long", year: "numeric" });
 
@@ -715,11 +806,23 @@ function DailyView({ scheduleData, reload }) {
 
   async function saveTask(task) {
     const isEdit = Boolean(task._id);
-    const dueDate = task.dueDate || `${date}T09:00`;
+    const startDate = task.startDate || date;
+    const dueDate = task.dueDate || startDate;
+    const slotStart = task.slotStart || "09:00";
+    const slotEnd = task.slotEnd || "10:00";
+    const payloadBody = {
+      ...task,
+      startDate,
+      dueDate,
+      slotStart,
+      slotEnd,
+      weeklyDays: normalizeWeeklyDays(task.weeklyDays),
+      isAlarmSet: true,
+    };
     const response = await fetch("/api/tasks", {
       method: isEdit ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isEdit ? { id: task._id, ...task, dueDate } : { ...task, dueDate }),
+      body: JSON.stringify(isEdit ? { id: task._id, ...payloadBody } : payloadBody),
     });
     const payload = await response.json();
     if (!response.ok || !payload.success) throw new Error(payload.error || payload.errors?.join(" ") || "Unable to save task.");
@@ -783,7 +886,7 @@ function DailyView({ scheduleData, reload }) {
             </div>
             <button className={primaryButton} onClick={() => { setEditing(null); setShowCreate(true); }}><Plus className="h-4 w-4" />Create Task</button>
           </div>
-          {showCreate ? <div className="mt-5"><TaskForm categories={scheduleData.categories || []} task={{ dueDate: `${date}T09:00` }} onSubmit={saveTask} onCancel={() => setShowCreate(false)} /></div> : null}
+          {showCreate ? <div className="mt-5"><TaskForm categories={scheduleData.categories || []} task={{ startDate: date, dueDate: date, slotStart: "09:00", slotEnd: "10:00", weeklyDays: [...DEFAULT_WEEKLY_DAYS] }} onSubmit={saveTask} onCancel={() => setShowCreate(false)} /></div> : null}
           {editing ? <div className="mt-5"><TaskForm categories={scheduleData.categories || []} task={editing} onSubmit={saveTask} onCancel={() => setEditing(null)} /></div> : null}
           <div className="mt-5 space-y-3">
             {selectedTasks.map((task) => (
@@ -791,7 +894,13 @@ function DailyView({ scheduleData, reload }) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-bold">{task.title}</p>
-                    <p className="text-sm text-slate-500">{task.priority} priority - {task.status.replace("_", " ")} - {new Date(task.dueDate).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>
+                    <p className="text-sm text-slate-500">
+                      {task.priority} priority - {task.status.replace("_", " ")} - {normalizeTimeString(task.slotStart || toTimeInput(task.startDate || task.dueDate), "09:00")}–{normalizeTimeString(task.slotEnd || toTimeInput(task.dueDate), "10:00")}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {formatDate(task.startDate || task.dueDate)} → {formatDate(task.dueDate || task.startDate)} · {(normalizeWeeklyDays(task.weeklyDays).map((day) => WEEKDAY_OPTIONS[day].label).join(", "))}
+                      {task.scheduleConfirmed ? " · confirmed" : ""}
+                    </p>
                   </div>
                   <button type="button" className={subtleButton} onClick={() => { setShowCreate(false); setEditing(task); }}>Edit</button>
                 </div>
@@ -804,7 +913,18 @@ function DailyView({ scheduleData, reload }) {
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-bold text-slate-950">Hourly Breakdown</h2>
         <div className="mt-4 grid max-h-[620px] gap-2 overflow-y-auto md:grid-cols-2 xl:grid-cols-4">
-          {scheduleData.hourlyBreakdown?.map((hour) => <div key={hour.hour} className="rounded-lg bg-slate-50 p-2"><p className="text-sm font-bold text-slate-700">{hour.hour}</p>{hour.logs.map((log) => <p key={log._id} className="text-xs text-slate-500">{log.task?.title} - {hours(log.durationMinutes)}h</p>)}{hour.isEmpty ? <p className="text-xs text-slate-400">No activity</p> : null}</div>)}
+          {scheduleData.hourlyBreakdown?.map((hour) => (
+            <div key={hour.hour} className="rounded-lg bg-slate-50 p-2">
+              <p className="text-sm font-bold text-slate-700">{hour.hour}</p>
+              {(hour.plannedTasks || []).map((task) => (
+                <p key={`plan-${task._id}`} className="text-xs font-semibold text-emerald-700">{task.title} · planned</p>
+              ))}
+              {(hour.logs || []).map((log) => (
+                <p key={log._id} className="text-xs text-slate-500">{log.task?.title} - {hours(log.durationMinutes)}h</p>
+              ))}
+              {hour.isEmpty ? <p className="text-xs text-slate-400">No activity</p> : null}
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -896,13 +1016,16 @@ function ProfileView({ user }) {
 
 function Overview({ user, tasks, timeData }) {
   const today = todayString();
-  const totalTasksToday = tasks.filter((task) => task.dueDate?.slice(0, 10) === today).length;
-  const completedTasksToday = tasks.filter((task) => task.dueDate?.slice(0, 10) === today && task.status === "completed").length;
+  const totalTasksToday = tasks.filter((task) => isTaskScheduledOnDate(task, today) || task.dueDate?.slice(0, 10) === today || dateString(task.startDate) === today).length;
+  const completedTasksToday = tasks.filter((task) => (isTaskScheduledOnDate(task, today) || task.dueDate?.slice(0, 10) === today) && task.status === "completed").length;
   const pendingTasks = tasks.filter((task) => task.status === "pending").length;
   const timeSpentToday = hours(timeData.todayLogs?.reduce((sum, log) => sum + log.durationMinutes, 0));
   const productivityScore = Math.round((totalTasksToday ? (completedTasksToday / totalTasksToday) * 50 : 0) + Math.min(timeSpentToday * 5, 50));
-  const todayPending = tasks.filter((task) => task.dueDate?.slice(0, 10) === today && task.status !== "completed").sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-  const upcoming = tasks.filter((task) => task.dueDate && task.dueDate.slice(0, 10) > today && task.status !== "completed").sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).slice(0, 6);
+  const todayPending = tasks.filter((task) => (isTaskScheduledOnDate(task, today) || task.dueDate?.slice(0, 10) === today) && task.status !== "completed" && task.status !== "cancelled").sort((a, b) => String(a.slotStart || "").localeCompare(String(b.slotStart || "")));
+  const upcoming = tasks.filter((task) => {
+    const start = dateString(task.startDate || task.dueDate);
+    return start && start > today && task.status !== "completed" && task.status !== "cancelled";
+  }).sort((a, b) => new Date(a.startDate || a.dueDate) - new Date(b.startDate || b.dueDate)).slice(0, 6);
   const categoryHours = Object.values(tasks.reduce((acc, task) => {
     const category = task.category || { _id: "uncategorized", name: "Uncategorized", color: "#64748B" };
     acc[category._id] ||= { ...category, hours: 0, tasks: 0 };
@@ -944,7 +1067,7 @@ function Overview({ user, tasks, timeData }) {
                   <p className="font-bold text-slate-950">{task.title}</p>
                   <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-red-700">{task.priority}</span>
                 </div>
-                <p className="mt-2 text-sm text-slate-500">{task.category?.name || "No category"} - due {new Date(task.dueDate).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>
+                <p className="mt-2 text-sm text-slate-500">{task.category?.name || "No category"} - {normalizeTimeString(task.slotStart || toTimeInput(task.startDate || task.dueDate), "09:00")}–{normalizeTimeString(task.slotEnd || toTimeInput(task.dueDate), "10:00")}</p>
               </div>
             ))}
             {todayPending.length === 0 ? <p className="text-sm font-semibold text-slate-500">No pending tasks due today.</p> : null}
@@ -957,7 +1080,7 @@ function Overview({ user, tasks, timeData }) {
               <div key={task._id} className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 p-3">
                 <div>
                   <p className="font-bold text-slate-950">{task.title}</p>
-                  <p className="text-xs font-semibold text-emerald-700">{formatDate(task.dueDate)} - {task.category?.name || "No category"}</p>
+                  <p className="text-xs font-semibold text-emerald-700">{formatDate(task.startDate || task.dueDate)} - {task.category?.name || "No category"}</p>
                 </div>
                 <Bell className="h-4 w-4 text-emerald-700" />
               </div>
@@ -1172,6 +1295,239 @@ function FloatingTimer({ timer }) {
   );
 }
 
+function TaskReminders({ tasks, onReload, onStartTask }) {
+  const [permission, setPermission] = useState(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  const [activeReminder, setActiveReminder] = useState(null);
+  const [rescheduleForm, setRescheduleForm] = useState({ startDate: todayString(), dueDate: todayString(), slotStart: "09:00", slotEnd: "10:00" });
+  const shownRef = useRef(new Set());
+  const lastOverdueRef = useRef(new Map());
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    function onMessage(event) {
+      if (event.data?.type !== "TRACK_TIME_REMINDER_ACTION") return;
+      const task = tasks.find((item) => item._id === event.data.taskId);
+      if (!task) return;
+      if (event.data.action === "confirm") {
+        confirmTask(task);
+      }
+      if (event.data.action === "reschedule") {
+        openReschedule(task);
+      }
+      if (event.data.action === "start") {
+        startFromReminder(task);
+      }
+    }
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, [tasks]);
+
+  async function requestPermission() {
+    if (typeof Notification === "undefined") return;
+    const result = await Notification.requestPermission();
+    setPermission(result);
+  }
+
+  async function patchTask(taskId, body) {
+    const response = await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: taskId, ...body }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || "Unable to update task reminder.");
+    }
+    await onReload();
+  }
+
+  async function confirmTask(task) {
+    await patchTask(task._id, { scheduleConfirmed: true, lastReminderAt: new Date().toISOString() });
+    setActiveReminder(null);
+  }
+
+  async function startFromReminder(task) {
+    await patchTask(task._id, { status: "in_progress", scheduleConfirmed: true, lastReminderAt: new Date().toISOString() });
+    onStartTask?.(task);
+    setActiveReminder(null);
+  }
+
+  function openReschedule(task) {
+    setRescheduleForm({
+      startDate: toDateInput(task.startDate) || todayString(),
+      dueDate: toDateInput(task.dueDate) || todayString(),
+      slotStart: normalizeTimeString(task.slotStart || toTimeInput(task.startDate || task.dueDate), "09:00"),
+      slotEnd: normalizeTimeString(task.slotEnd || toTimeInput(task.dueDate), "10:00"),
+    });
+    setActiveReminder({ task, kind: "reschedule", label: "Reschedule task" });
+  }
+
+  async function submitReschedule(event) {
+    event.preventDefault();
+    if (!activeReminder?.task) return;
+    await patchTask(activeReminder.task._id, {
+      startDate: rescheduleForm.startDate,
+      dueDate: rescheduleForm.dueDate,
+      slotStart: rescheduleForm.slotStart,
+      slotEnd: rescheduleForm.slotEnd,
+      scheduleConfirmed: false,
+      lastReminderAt: new Date().toISOString(),
+    });
+    shownRef.current = new Set([...shownRef.current].filter((key) => !key.startsWith(`${activeReminder.task._id}:`)));
+    lastOverdueRef.current.delete(activeReminder.task._id);
+    setActiveReminder(null);
+  }
+
+  function showBrowserNotification(task, title, body, tag) {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const options = {
+      body,
+      tag,
+      renotify: true,
+      requireInteraction: true,
+      data: { taskId: task._id, url: "/dashboard?view=daily" },
+      actions: [
+        { action: "confirm", title: "Confirm" },
+        { action: "reschedule", title: "Reschedule" },
+        { action: "start", title: "Start" },
+      ],
+    };
+    if (navigator.serviceWorker?.ready) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title, options).catch(() => {
+          try {
+            new Notification(title, options);
+          } catch {
+            // Ignore browsers that reject Notification constructor options.
+          }
+        });
+      });
+      return;
+    }
+    try {
+      new Notification(title, options);
+    } catch {
+      // Ignore unsupported Notification options.
+    }
+  }
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const now = new Date();
+      const today = todayString();
+
+      tasks.forEach((task) => {
+        if (!["pending", "in_progress"].includes(task.status)) return;
+        if (task.status === "in_progress") return;
+        const bounds = getTaskSlotBounds(task, today);
+        if (!bounds) return;
+
+        const minutesUntilStart = Math.round((bounds.startAt.getTime() - now.getTime()) / 60000);
+        const slotLabel = `${formatClock(bounds.startAt)}–${formatClock(bounds.endAt)}`;
+
+        REMINDER_OFFSETS_MINUTES.forEach((offset) => {
+          if (minutesUntilStart > offset || minutesUntilStart < offset - 1) return;
+          const key = `${task._id}:${today}:${offset}`;
+          if (shownRef.current.has(key)) return;
+          shownRef.current.add(key);
+          const label = `${offset} minutes before`;
+          setActiveReminder({
+            task,
+            kind: "upcoming",
+            label,
+            slotLabel,
+          });
+          showBrowserNotification(
+            task,
+            `Upcoming: ${task.title}`,
+            `${label} · ${slotLabel}`,
+            key
+          );
+          patchTask(task._id, { lastReminderAt: now.toISOString() }).catch(() => {});
+        });
+
+        if (now >= bounds.startAt && task.status !== "in_progress" && task.status !== "completed") {
+          const lastShown = lastOverdueRef.current.get(task._id) || 0;
+          if (now.getTime() - lastShown < OVERDUE_REMINDER_INTERVAL_MS) return;
+          lastOverdueRef.current.set(task._id, now.getTime());
+          const key = `${task._id}:${today}:overdue:${Math.floor(now.getTime() / OVERDUE_REMINDER_INTERVAL_MS)}`;
+          if (shownRef.current.has(key)) return;
+          shownRef.current.add(key);
+          setActiveReminder({
+            task,
+            kind: "overdue",
+            label: "Still waiting to start",
+            slotLabel,
+          });
+          showBrowserNotification(
+            task,
+            `Start now: ${task.title}`,
+            `Your ${slotLabel} slot started and this task is not marked started yet.`,
+            key
+          );
+          patchTask(task._id, { lastReminderAt: now.toISOString() }).catch(() => {});
+        }
+      });
+    }, 20000);
+
+    return () => window.clearInterval(interval);
+  }, [tasks]);
+
+  return (
+    <>
+      {permission === "default" ? (
+        <div className="fixed bottom-5 left-5 z-50 max-w-sm rounded-lg border border-emerald-200 bg-white p-4 shadow-xl">
+          <p className="text-sm font-bold text-slate-950">Enable task reminders</p>
+          <p className="mt-1 text-xs text-slate-500">Get Google Calendar-style alerts 30 and 10 minutes before each work slot.</p>
+          <button type="button" className={`${primaryButton} mt-3`} onClick={requestPermission}>
+            <Bell className="h-4 w-4" />
+            Allow notifications
+          </button>
+        </div>
+      ) : null}
+
+      {activeReminder ? (
+        <div className="fixed inset-x-4 bottom-5 z-[60] mx-auto max-w-lg rounded-xl border border-emerald-200 bg-white p-4 shadow-2xl sm:inset-x-auto sm:right-5 sm:left-auto">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">{activeReminder.label}</p>
+              <h3 className="mt-1 text-base font-bold text-slate-950">{activeReminder.task.title}</h3>
+              {activeReminder.slotLabel ? <p className="mt-1 text-sm text-slate-500">{activeReminder.slotLabel}</p> : null}
+              {activeReminder.kind === "reschedule" ? (
+                <form onSubmit={submitReschedule} className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <Field label="Start date"><input type="date" className={inputClass} value={rescheduleForm.startDate} onChange={(event) => setRescheduleForm({ ...rescheduleForm, startDate: event.target.value })} required /></Field>
+                  <Field label="Due date"><input type="date" className={inputClass} value={rescheduleForm.dueDate} onChange={(event) => setRescheduleForm({ ...rescheduleForm, dueDate: event.target.value })} required /></Field>
+                  <Field label="Slot start"><input type="time" className={inputClass} value={rescheduleForm.slotStart} onChange={(event) => setRescheduleForm({ ...rescheduleForm, slotStart: event.target.value })} required /></Field>
+                  <Field label="Slot end"><input type="time" className={inputClass} value={rescheduleForm.slotEnd} onChange={(event) => setRescheduleForm({ ...rescheduleForm, slotEnd: event.target.value })} required /></Field>
+                  <div className="sm:col-span-2 flex flex-wrap gap-2">
+                    <button type="submit" className={primaryButton}>Save new schedule</button>
+                    <button type="button" className={subtleButton} onClick={() => setActiveReminder(null)}>Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className={primaryButton} onClick={() => confirmTask(activeReminder.task)}>Confirm</button>
+                  <button type="button" className={subtleButton} onClick={() => openReschedule(activeReminder.task)}>Reschedule</button>
+                  <button type="button" className={subtleButton} onClick={() => startFromReminder(activeReminder.task)}><Play className="h-4 w-4" />Start task</button>
+                  <button type="button" className={subtleButton} onClick={() => setActiveReminder(null)}>Dismiss</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export default function DashboardClient({ user }) {
   const searchParams = useSearchParams();
   const activeView = searchParams.get("view") || "overview";
@@ -1288,5 +1644,5 @@ export default function DashboardClient({ user }) {
     return <Overview user={user} tasks={state.tasks} timeData={state.timeData} />;
   }, [activeView, state, user, load, timer]);
 
-  return <div className="mx-auto max-w-7xl">{content}<FloatingTimer timer={timer} /></div>;
+  return <div className="mx-auto max-w-7xl">{content}<FloatingTimer timer={timer} /><TaskReminders tasks={state.tasks} onReload={load} onStartTask={startTask} /></div>;
 }

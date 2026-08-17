@@ -1,4 +1,4 @@
-const CACHE_NAME = "track-time-shell-v1";
+const CACHE_NAME = "track-time-shell-v2";
 const SHELL = ["/", "/login", "/dashboard", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -30,5 +30,31 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(request).then((cached) => cached || caches.match("/dashboard")))
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const action = event.action || "open";
+  const taskId = event.notification.data?.taskId;
+  const targetUrl = event.notification.data?.url || "/dashboard?view=daily";
+
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      let client = clientsList.find((item) => item.url.includes("/dashboard")) || clientsList[0];
+
+      if (client) {
+        await client.focus();
+        client.postMessage({
+          type: "TRACK_TIME_REMINDER_ACTION",
+          action,
+          taskId,
+        });
+        return;
+      }
+
+      await self.clients.openWindow(targetUrl);
+    })()
   );
 });
