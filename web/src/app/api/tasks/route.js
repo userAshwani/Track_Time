@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 
 import dbConnect from "../../../../lib/dbConnect.js";
 import { getCurrentUser } from "../../../../lib/auth.js";
@@ -45,7 +46,14 @@ function normalizeInteger(value, fallback = undefined) {
   return Number.isInteger(number) ? number : Number.NaN;
 }
 
+function normalizeObjectId(value) {
+  const id = String(value || "").trim();
+  return mongoose.Types.ObjectId.isValid(id) ? id : null;
+}
+
 function normalizeTaskPayload(body) {
+  const categoryId = body.categoryId || body.category_id;
+
   return {
     title: typeof body.title === "string" ? body.title.trim() : "",
     description: typeof body.description === "string" ? body.description.trim() : "",
@@ -57,7 +65,7 @@ function normalizeTaskPayload(body) {
     isAlarmSet: Boolean(body.isAlarmSet),
     alarmTime: body.alarmTime ? new Date(body.alarmTime) : null,
     pushToken: typeof body.pushToken === "string" ? body.pushToken.trim() : "",
-    categoryId: body.categoryId || body.category_id || null,
+    categoryId: categoryId ? String(categoryId).trim() : null,
     dueDate: body.dueDate || body.due_date ? new Date(body.dueDate || body.due_date) : null,
     estimatedHours:
       body.estimatedHours === "" || body.estimated_hours === ""
@@ -96,6 +104,10 @@ function validateTaskPayload(payload) {
 
   if (payload.isAlarmSet && !payload.alarmTime) {
     errors.push("alarmTime is required when isAlarmSet is true.");
+  }
+
+  if (payload.categoryId && !normalizeObjectId(payload.categoryId)) {
+    errors.push("categoryId must be a valid category id.");
   }
 
   if (payload.alarmTime && Number.isNaN(payload.alarmTime.getTime())) {
@@ -166,7 +178,8 @@ function normalizeTaskUpdatePayload(body) {
   }
 
   if (body.categoryId !== undefined || body.category_id !== undefined) {
-    payload.categoryId = body.categoryId || body.category_id || null;
+    const categoryId = body.categoryId || body.category_id;
+    payload.categoryId = categoryId ? String(categoryId).trim() : null;
   }
 
   if (body.dueDate !== undefined || body.due_date !== undefined) {
@@ -364,7 +377,7 @@ export async function POST(request) {
     await dbConnect();
 
     if (payload.categoryId) {
-      const category = await Category.exists({ _id: payload.categoryId, userId: currentUser._id });
+      const category = await Category.exists({ _id: normalizeObjectId(payload.categoryId), userId: currentUser._id });
       if (!category) {
         return jsonResponse({ success: false, error: "Category not found." }, 404);
       }
@@ -456,6 +469,10 @@ export async function PATCH(request) {
       validationErrors.push(`priority must be one of: ${TASK_PRIORITIES.join(", ")}.`);
     }
 
+    if (payload.categoryId && !normalizeObjectId(payload.categoryId)) {
+      validationErrors.push("categoryId must be a valid category id.");
+    }
+
     if (payload.timeHorizon !== undefined && !TIME_HORIZONS.includes(payload.timeHorizon)) {
       validationErrors.push(`timeHorizon must be one of: ${TIME_HORIZONS.join(", ")}.`);
     }
@@ -493,7 +510,7 @@ export async function PATCH(request) {
     await dbConnect();
 
     if (payload.categoryId) {
-      const category = await Category.exists({ _id: payload.categoryId, userId: currentUser._id });
+      const category = await Category.exists({ _id: normalizeObjectId(payload.categoryId), userId: currentUser._id });
       if (!category) {
         return jsonResponse({ success: false, error: "Category not found." }, 404);
       }

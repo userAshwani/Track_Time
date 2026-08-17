@@ -49,6 +49,11 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" }) : "No date";
 }
 
+function normalizeCategoryIdForSubmit(categoryId) {
+  const value = String(categoryId || "").trim();
+  return value.startsWith("demo-cat-") ? "" : value;
+}
+
 function demoDate(offsetDays = 0, hour = 9, minute = 0) {
   const date = new Date();
   date.setDate(date.getDate() + offsetDays);
@@ -283,6 +288,7 @@ function TaskForm({ categories, task, onSubmit, onCancel }) {
         onSubmit({
           ...task,
           ...form,
+          categoryId: normalizeCategoryIdForSubmit(form.categoryId),
           dueDate: form.dueDate || null,
           estimatedHours: form.estimatedHours === "" ? null : Number(form.estimatedHours),
           timeAllocated: Math.max(1, Math.round((Number(form.estimatedHours) || 1) * 60)),
