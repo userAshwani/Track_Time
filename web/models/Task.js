@@ -114,12 +114,10 @@ TaskSchema.index({ userId: 1, dueDate: 1, scheduleOrder: 1 });
 TaskSchema.index({ isAlarmSet: 1, alarmTime: 1 });
 TaskSchema.index({ createdAt: -1 });
 
-TaskSchema.pre("validate", function validateAlarmConfiguration(next) {
+TaskSchema.pre("validate", function validateAlarmConfiguration() {
   if (this.isAlarmSet && !this.alarmTime) {
     this.invalidate("alarmTime", "Alarm time is required when an alarm is enabled.");
   }
-
-  next();
 });
 
 const Task = mongoose.models.Task || mongoose.model("Task", TaskSchema);
