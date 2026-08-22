@@ -25,3 +25,16 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+.landing {
+  --ink: #14201d;
+  --ink-dim: #56645f;
+  --paper: #faf8f3;
+  --paper-raised: #ffffff;
+  --line: #e4ded0;
+  --teal: #1f6f5c;
+  --teal-deep: #133f34;
+  --teal-soft: #e5efe9;
+  --amber: #c17f2e;
+  --amber-soft: #f6ead4;
+}
