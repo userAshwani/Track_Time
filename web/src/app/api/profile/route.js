@@ -8,6 +8,9 @@ import {
   normalizeEmail,
 } from "../../../../lib/auth.js";
 import User from "../../../../models/User.js";
+import { RESERVED_USERNAMES } from "../../../../lib/streak.js";
+
+const USERNAME_PATTERN = /^[a-z0-9][a-z0-9_-]{2,19}$/;
 
 export const runtime = "nodejs";
 
@@ -42,6 +45,10 @@ export async function PATCH(request) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const email = normalizeEmail(body.email || currentUser.email);
     const password = String(body.password || "");
+    const usernameProvided = Object.prototype.hasOwnProperty.call(body, "username");
+    const username = usernameProvided ? String(body.username || "").trim().toLowerCase() : null;
+    const publicProfileProvided = Object.prototype.hasOwnProperty.call(body, "publicProfile");
+    const publicProfile = Boolean(body.publicProfile);
     const update = {};
 
     if (name.length > 120) {
@@ -49,6 +56,22 @@ export async function PATCH(request) {
         { success: false, error: "Name cannot exceed 120 characters." },
         { status: 400 }
       );
+    }
+
+    if (usernameProvided) {
+      if (!USERNAME_PATTERN.test(username)) {
+        return NextResponse.json(
+          { success: false, error: "Username must be 3-20 characters: lowercase letters, numbers, - or _, starting with a letter or number." },
+          { status: 400 }
+        );
+      }
+
+      if (RESERVED_USERNAMES.has(username)) {
+        return NextResponse.json(
+          { success: false, error: "This username is reserved. Choose another." },
+          { status: 400 }
+        );
+      }
     }
 
     if (!isValidEmail(email)) {
@@ -83,6 +106,33 @@ export async function PATCH(request) {
       update.email = email;
     }
 
+    if (usernameProvided && username !== currentUser.username) {
+      const existingUsername = await User.exists({
+        username,
+        _id: { $ne: currentUser._id },
+      });
+
+      if (existingUsername) {
+        return NextResponse.json(
+          { success: false, error: "This username is already taken." },
+          { status: 409 }
+        );
+      }
+
+      update.username = username;
+    }
+
+    if (publicProfileProvided) {
+      if (publicProfile && !(usernameProvided ? username : currentUser.username)) {
+        return NextResponse.json(
+          { success: false, error: "Choose a username before making your profile public." },
+          { status: 400 }
+        );
+      }
+
+      update.publicProfile = publicProfile;
+    }
+
     update.name = name;
 
     if (password) {
@@ -107,10 +157,19 @@ export async function PATCH(request) {
         name: updatedUser.name || "",
         email: updatedUser.email,
         role: updatedUser.role,
+        username: updatedUser.username || "",
+        publicProfile: Boolean(updatedUser.publicProfile),
       },
     });
   } catch (error) {
     console.error("PATCH /api/profile failed.", error);
+
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { success: false, error: "This username is already taken." },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(
       { success: false, error: "Unable to update profile right now." },

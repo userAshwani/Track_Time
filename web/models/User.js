@@ -13,6 +13,19 @@ const UserSchema = new Schema(
       maxlength: [120, "Name cannot exceed 120 characters."],
       default: "",
     },
+    username: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+      unique: true,
+      sparse: true,
+      match: [/^[a-z0-9][a-z0-9_-]{2,19}$/, "Username must be 3-20 characters: lowercase letters, numbers, - or _."],
+    },
+    publicProfile: {
+      type: Boolean,
+      default: false,
+    },
     email: {
       type: String,
       required: true,

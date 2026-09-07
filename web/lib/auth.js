@@ -158,6 +158,8 @@ export async function getCurrentUser() {
     role: getRoleForEmail(user.email) === "superadmin" ? "superadmin" : user.role,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
+    username: user.username || "",
+    publicProfile: Boolean(user.publicProfile),
   };
 }
 

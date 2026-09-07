@@ -7,8 +7,11 @@ import {
   Bell,
   CheckCircle2,
   Clock3,
+  Copy,
   Download,
   Eye,
+  Globe2,
+  Link2,
   ListChecks,
   MessageSquare,
   Play,
@@ -986,6 +989,10 @@ function ProfileView({ user }) {
   const router = useRouter();
   const [form, setForm] = useState({ name: user.name || "", email: user.email || "", password: "" });
   const [message, setMessage] = useState("");
+  const [publicForm, setPublicForm] = useState({ username: user.username || "", publicProfile: Boolean(user.publicProfile) });
+  const [publicMessage, setPublicMessage] = useState("");
+  const [publicError, setPublicError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -998,17 +1005,91 @@ function ProfileView({ user }) {
     }
   }
 
+  async function savePublicProfile(event) {
+    event.preventDefault();
+    setPublicMessage("");
+    setPublicError("");
+    const response = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: form.name, email: form.email, username: publicForm.username, publicProfile: publicForm.publicProfile }),
+    });
+    const payload = await response.json();
+    if (payload.success) {
+      setPublicForm({ username: payload.user.username || "", publicProfile: payload.user.publicProfile });
+      setPublicMessage("Public profile updated.");
+      router.refresh();
+    } else {
+      setPublicError(payload.error || "Unable to update public profile.");
+    }
+  }
+
+  const profileUrl = publicForm.username && typeof window !== "undefined"
+    ? `${window.location.origin}/u/${publicForm.username}`
+    : publicForm.username ? `/u/${publicForm.username}` : "";
+
+  async function copyLink() {
+    if (!profileUrl) return;
+    await navigator.clipboard.writeText(profileUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
-    <form onSubmit={saveProfile} className="max-w-2xl rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
-      <div className="mt-5 grid gap-4">
-        <Field label="Full name"><input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
-        <Field label="Email address"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></Field>
-        <Field label="New password"><input type="password" className={inputClass} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Minimum 8 characters" /></Field>
-      </div>
-      {message ? <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{message}</p> : null}
-      <button className={`${primaryButton} mt-5`}><Save className="h-4 w-4" />Save profile</button>
-    </form>
+    <div className="max-w-2xl space-y-5">
+      <form onSubmit={saveProfile} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
+        <div className="mt-5 grid gap-4">
+          <Field label="Full name"><input className={inputClass} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
+          <Field label="Email address"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></Field>
+          <Field label="New password"><input type="password" className={inputClass} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="Minimum 8 characters" /></Field>
+        </div>
+        {message ? <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{message}</p> : null}
+        <button className={`${primaryButton} mt-5`}><Save className="h-4 w-4" />Save profile</button>
+      </form>
+
+      <form onSubmit={savePublicProfile} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3"><Globe2 className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Public profile</h2></div>
+        <p className="mt-2 text-sm text-slate-500">Share your streak and stats with a public link, like a GitHub profile. Off by default — your tasks and time logs are never shown.</p>
+        <div className="mt-5 grid gap-4">
+          <Field label="Username">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-400">/u/</span>
+              <input
+                className={inputClass}
+                value={publicForm.username}
+                onChange={(event) => setPublicForm({ ...publicForm, username: event.target.value.toLowerCase() })}
+                placeholder="yourname"
+                pattern="[a-z0-9][a-z0-9_-]{2,19}"
+                title="3-20 characters: lowercase letters, numbers, - or _"
+              />
+            </div>
+          </Field>
+          <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              checked={publicForm.publicProfile}
+              onChange={(event) => setPublicForm({ ...publicForm, publicProfile: event.target.checked })}
+            />
+            Make my profile public
+          </label>
+        </div>
+        {publicForm.username && publicForm.publicProfile ? (
+          <div className="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3">
+            <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="flex-1 truncate text-sm font-semibold text-slate-700">{profileUrl}</span>
+            <button type="button" onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-100">
+              <Copy className="h-3.5 w-3.5" />
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        ) : null}
+        {publicMessage ? <p className="mt-4 rounded-lg bg-green-50 p-3 text-sm font-bold text-green-700">{publicMessage}</p> : null}
+        {publicError ? <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{publicError}</p> : null}
+        <button className={`${primaryButton} mt-5`}><Save className="h-4 w-4" />Save public profile</button>
+      </form>
+    </div>
   );
 }
 
