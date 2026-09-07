@@ -5,7 +5,8 @@ import dbConnect from "../../../../lib/dbConnect.js";
 import User from "../../../../models/User.js";
 import Task from "../../../../models/Task.js";
 import TimeLog from "../../../../models/TimeLog.js";
-import { computeStreaks } from "../../../../lib/streak.js";
+import { computeStreaks, buildActivityGrid } from "../../../../lib/streak.js";
+import ActivityHeatmap from "../../../components/ActivityHeatmap.js";
 
 export const runtime = "nodejs";
 
@@ -36,21 +37,14 @@ async function loadProfile(username) {
     Task.countDocuments({ userId: user._id }),
   ]);
 
-  const dateStrings = logs.map((log) => new Date(log.startTime).toISOString().slice(0, 10));
-  const streaks = computeStreaks(dateStrings);
-  const totalMinutes = logs.reduce((sum, log) => sum + log.durationMinutes, 0);
-
-  const last12Weeks = Array.from({ length: 84 }, (_, index) => {
-    const day = new Date();
-    day.setUTCHours(0, 0, 0, 0);
-    day.setUTCDate(day.getUTCDate() - (83 - index));
-    return day.toISOString().slice(0, 10);
-  });
   const minutesByDay = logs.reduce((acc, log) => {
     const day = new Date(log.startTime).toISOString().slice(0, 10);
     acc[day] = (acc[day] || 0) + log.durationMinutes;
     return acc;
   }, {});
+
+  const streaks = computeStreaks(Object.keys(minutesByDay));
+  const totalMinutes = logs.reduce((sum, log) => sum + log.durationMinutes, 0);
 
   return {
     name: user.name || username,
@@ -58,11 +52,10 @@ async function loadProfile(username) {
     memberSince: user.createdAt,
     currentStreak: streaks.current,
     longestStreak: streaks.longest,
-    activeDays: streaks.activeDays,
     totalHours: Math.round((totalMinutes / 60) * 10) / 10,
     tasksCompleted,
     tasksTotal,
-    heatmap: last12Weeks.map((day) => ({ day, minutes: minutesByDay[day] || 0 })),
+    ...buildActivityGrid(minutesByDay),
   };
 }
 
@@ -75,25 +68,12 @@ function initials(name) {
     .join("") || "?";
 }
 
-function heatColor(minutes) {
-  if (minutes <= 0) return "bg-slate-100";
-  if (minutes < 30) return "bg-emerald-200";
-  if (minutes < 60) return "bg-emerald-400";
-  if (minutes < 120) return "bg-emerald-600";
-  return "bg-emerald-800";
-}
-
 export default async function PublicProfilePage({ params }) {
   const { username } = await params;
   const profile = await loadProfile(username);
 
   if (!profile) {
     notFound();
-  }
-
-  const weeks = [];
-  for (let index = 0; index < profile.heatmap.length; index += 7) {
-    weeks.push(profile.heatmap.slice(index, index + 7));
   }
 
   return (
@@ -121,20 +101,7 @@ export default async function PublicProfilePage({ params }) {
           </div>
 
           <div className="mt-8">
-            <p className="text-sm font-bold text-slate-500">Last 12 weeks</p>
-            <div className="mt-3 flex gap-1 overflow-x-auto pb-2">
-              {weeks.map((week, weekIndex) => (
-                <div key={weekIndex} className="flex flex-col gap-1">
-                  {week.map((cell) => (
-                    <div
-                      key={cell.day}
-                      title={`${cell.day}: ${Math.round((cell.minutes / 60) * 10) / 10}h`}
-                      className={`h-3 w-3 rounded-sm ${heatColor(cell.minutes)}`}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <ActivityHeatmap weeks={profile.weeks} monthLabels={profile.monthLabels} title="Last 13 weeks" />
           </div>
 
           <p className="mt-8 text-center text-xs font-semibold text-slate-400">

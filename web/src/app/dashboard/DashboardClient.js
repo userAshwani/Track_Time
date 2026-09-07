@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  CalendarCheck,
   CheckCircle2,
   Clock3,
   Copy,
   Download,
   Eye,
+  Flame,
   Globe2,
   Link2,
   ListChecks,
@@ -20,9 +22,11 @@ import {
   Square,
   Timer,
   Trash2,
+  Trophy,
   UserRound,
 } from "lucide-react";
 import TaskReminders from "../../components/TaskReminders";
+import ActivityHeatmap from "../../components/ActivityHeatmap";
 import {
   DEFAULT_WEEKLY_DAYS,
   WEEKDAY_OPTIONS,
@@ -993,6 +997,19 @@ function ProfileView({ user }) {
   const [publicMessage, setPublicMessage] = useState("");
   const [publicError, setPublicError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile/stats", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!cancelled && payload.success) setStats(payload.data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -1036,7 +1053,8 @@ function ProfileView({ user }) {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="space-y-5">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
       <form onSubmit={saveProfile} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3"><UserRound className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Profile settings</h2></div>
         <div className="mt-5 grid gap-4">
@@ -1089,6 +1107,26 @@ function ProfileView({ user }) {
         {publicError ? <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{publicError}</p> : null}
         <button className={`${primaryButton} mt-5`}><Save className="h-4 w-4" />Save public profile</button>
       </form>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3"><Flame className="h-5 w-5 text-emerald-700" /><h2 className="text-xl font-bold">Your streak</h2></div>
+        {stats ? (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Metric icon={Flame} label="Current streak" value={`${stats.currentStreak}d`} color="text-orange-600" bg="bg-orange-50" />
+              <Metric icon={Trophy} label="Longest streak" value={`${stats.longestStreak}d`} color="text-amber-600" bg="bg-amber-50" />
+              <Metric icon={Clock3} label="Hours logged" value={`${stats.totalHours}h`} />
+              <Metric icon={CalendarCheck} label="Tasks done" value={`${stats.tasksCompleted}/${stats.tasksTotal}`} color="text-sky-700" bg="bg-sky-50" />
+            </div>
+            <div className="mt-6">
+              <ActivityHeatmap weeks={stats.weeks} monthLabels={stats.monthLabels} title="Last 13 weeks" />
+            </div>
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">Loading your activity…</p>
+        )}
+      </div>
     </div>
   );
 }

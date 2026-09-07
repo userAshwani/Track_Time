@@ -33,6 +33,62 @@ export function computeStreaks(dateStrings) {
   return { current, longest, activeDays: days.length };
 }
 
+const HEAT_THRESHOLDS = [30, 60, 120];
+
+export function heatLevel(minutes) {
+  if (!minutes || minutes <= 0) return 0;
+  if (minutes < HEAT_THRESHOLDS[0]) return 1;
+  if (minutes < HEAT_THRESHOLDS[1]) return 2;
+  if (minutes < HEAT_THRESHOLDS[2]) return 3;
+  return 4;
+}
+
+/**
+ * Builds a GitHub-style activity grid: columns are calendar weeks (Sun-Sat),
+ * padded so the grid always starts on a Sunday and ends on the most recent
+ * Saturday, with future days marked so they render blank instead of "0".
+ */
+export function buildActivityGrid(minutesByDay, weeksBack = 13) {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const gridEnd = new Date(today);
+  gridEnd.setUTCDate(today.getUTCDate() + (6 - today.getUTCDay()));
+
+  const gridStart = new Date(gridEnd);
+  gridStart.setUTCDate(gridEnd.getUTCDate() - (weeksBack * 7 - 1));
+  gridStart.setUTCDate(gridStart.getUTCDate() - gridStart.getUTCDay());
+
+  const weeks = [];
+  const monthLabels = [];
+  let cursor = new Date(gridStart);
+  let lastMonth = null;
+  let weekIndex = 0;
+
+  while (cursor <= gridEnd) {
+    const week = [];
+    for (let day = 0; day < 7; day += 1) {
+      const key = cursor.toISOString().slice(0, 10);
+      const future = cursor > today;
+      week.push({ date: key, minutes: future ? 0 : minutesByDay[key] || 0, future });
+
+      if (day === 0) {
+        const month = cursor.toLocaleDateString("en", { month: "short" });
+        if (month !== lastMonth) {
+          monthLabels.push({ weekIndex, label: month });
+          lastMonth = month;
+        }
+      }
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    weeks.push(week);
+    weekIndex += 1;
+  }
+
+  return { weeks, monthLabels };
+}
+
 export const RESERVED_USERNAMES = new Set([
   "admin", "api", "app", "login", "logout", "dashboard", "superadmin",
   "u", "user", "users", "settings", "profile", "about", "help", "support",
