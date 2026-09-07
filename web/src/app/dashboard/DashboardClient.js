@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import TaskReminders from "../../components/TaskReminders";
 import ActivityHeatmap from "../../components/ActivityHeatmap";
+import DayClock from "../../components/DayClock";
 import {
   DEFAULT_WEEKLY_DAYS,
   WEEKDAY_OPTIONS,
@@ -570,14 +571,21 @@ function TasksView({ tasks, categories, reload, timer }) {
   );
 }
 
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
 function CategoriesView({ categories, tasks, reload }) {
   const [form, setForm] = useState({ name: "", color: COLORS[3], icon: "folder" });
   const [editing, setEditing] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const activeForm = editing || form;
   const setActiveForm = editing ? setEditing : setForm;
   const selectedCategory = categories.find((category) => category._id === selectedCategoryId);
   const selectedTasks = selectedCategoryId ? tasks.filter((task) => String(task.categoryId) === String(selectedCategoryId)) : [];
+
+  function applyCustomColor(color) {
+    setActiveForm({ ...activeForm, color });
+  }
 
   async function saveCategory(event) {
     event.preventDefault();
@@ -597,6 +605,7 @@ function CategoriesView({ categories, tasks, reload }) {
     const response = await fetch(`/api/categories?id=${category._id}`, { method: "DELETE" });
     const payload = await response.json();
     if (!response.ok || !payload.success) alert(payload.error || "Unable to delete category.");
+    setDeleteTarget(null);
     await reload();
   }
 
@@ -613,6 +622,24 @@ function CategoriesView({ categories, tasks, reload }) {
           {COLORS.map((color) => (
             <button key={color} type="button" aria-label={color} onClick={() => setActiveForm({ ...activeForm, color })} className={`h-9 w-9 rounded-lg border-4 ${activeForm.color === color ? "border-slate-950" : "border-white"}`} style={{ backgroundColor: color }} />
           ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <span className="text-sm font-bold text-slate-700">Custom color</span>
+          <input
+            type="color"
+            value={HEX_COLOR_PATTERN.test(activeForm.color) ? activeForm.color : "#059669"}
+            onChange={(event) => applyCustomColor(event.target.value)}
+            className="h-9 w-9 cursor-pointer rounded-lg border border-slate-300 bg-white p-0.5"
+            aria-label="Pick a custom color"
+          />
+          <input
+            className={`${inputClass} w-32 font-mono uppercase`}
+            value={activeForm.color || ""}
+            onChange={(event) => applyCustomColor(event.target.value)}
+            placeholder="#059669"
+            maxLength={7}
+          />
+          <span className="h-9 w-9 rounded-lg border border-slate-200" style={{ backgroundColor: HEX_COLOR_PATTERN.test(activeForm.color) ? activeForm.color : "transparent" }} />
         </div>
       </form>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -635,7 +662,7 @@ function CategoriesView({ categories, tasks, reload }) {
               <div className="mt-4 flex flex-wrap gap-2">
                 <button className={subtleButton} onClick={() => setSelectedCategoryId(category._id)}><Eye className="h-4 w-4" />View</button>
                 <button className={subtleButton} onClick={() => setEditing(category)}>Edit</button>
-                <button className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => deleteCategory(category)}>Delete</button>
+                <button className="rounded-lg bg-red-50 px-3 py-2 text-sm font-bold text-red-700" onClick={() => setDeleteTarget(category)}>Delete</button>
               </div>
             </article>
           );
@@ -670,7 +697,31 @@ function CategoriesView({ categories, tasks, reload }) {
           {selectedTasks.length === 0 ? <p className="mt-5 text-sm font-semibold text-slate-500">No tasks in this category yet.</p> : null}
         </div>
       ) : null}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete category?"
+        message={deleteTarget ? `This removes "${deleteTarget.name}". Tasks already in this category keep their data but lose the category link.` : ""}
+        confirmLabel="Delete category"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => deleteCategory(deleteTarget)}
+      />
     </section>
+  );
+}
+
+function ConfirmModal({ open, title, message, confirmLabel = "Confirm", onConfirm, onCancel }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" onClick={onCancel}>
+      <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+        {message ? <p className="mt-2 text-sm text-slate-500">{message}</p> : null}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={subtleButton} onClick={onCancel}>Cancel</button>
+          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-red-700" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1133,6 +1184,7 @@ function ProfileView({ user }) {
 
 function Overview({ user, tasks, timeData }) {
   const today = todayString();
+  const [clockDate, setClockDate] = useState(today);
   const totalTasksToday = tasks.filter((task) => isTaskScheduledOnDate(task, today) || task.dueDate?.slice(0, 10) === today || dateString(task.startDate) === today).length;
   const completedTasksToday = tasks.filter((task) => (isTaskScheduledOnDate(task, today) || task.dueDate?.slice(0, 10) === today) && task.status === "completed").length;
   const pendingTasks = tasks.filter((task) => task.status === "pending").length;
@@ -1171,6 +1223,18 @@ function Overview({ user, tasks, timeData }) {
         <Metric icon={ListChecks} label="Pending Tasks" value={pendingTasks} helper="Need attention" color="text-red-700" bg="bg-red-50" />
       </div>
       {focus ? <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-bold text-slate-500">Today&apos;s Focus</p><h3 className="mt-1 text-xl font-bold" style={{ color: focus.color }}>{focus.name}</h3><p className="mt-1 text-sm text-slate-500">{focus.tasksCount} pending tasks in this category</p></div> : null}
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-slate-950">Day clock</h2>
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            Date
+            <input type="date" className={`${inputClass} w-auto`} value={clockDate} onChange={(event) => setClockDate(event.target.value || today)} />
+          </label>
+        </div>
+        <div className="mt-4">
+          <DayClock tasks={tasks} date={clockDate} />
+        </div>
+      </div>
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
